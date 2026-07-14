@@ -56,18 +56,23 @@ copy buttons.
 
 ## AI rewrite (optional)
 
-The Latest Feedback caption on a project, and the description on any standalone
-item, have a **✨ Rewrite** button that sends the current text to the free
-[Groq](https://console.groq.com) API and replaces it with a version reworded
-in a precise, technical voice — detailed enough that the point stands on its
-own as a meeting-minutes-style talking point. It only rewrites — it never
-invents facts, ticket numbers, or details that aren't already in the text.
+The Project Name and Latest Feedback caption on a project, and the description
+on any standalone item, each have a **✨ Rewrite** button that sends the
+current text to the free [Groq](https://console.groq.com) API and replaces it
+with a reworded version. Project Name gets a lighter touch — tidied wording,
+casing, and grammar only, without changing the subject or inventing a
+different name. Everything else is reworded in a precise, technical voice,
+detailed enough that the point stands on its own as a meeting-minutes-style
+talking point. In every case it only rewrites what's there — it's instructed
+to use only the facts, numbers, and details already present in the source
+text, and to keep things equally vague rather than invent specifics when the
+source is vague.
 
 There's also an **✨ AI Enhance All** button (top header) that runs the same
-rewrite over every non-empty project caption and standalone item in one pass —
-useful before printing/copying the report. It confirms first (since it touches
-everything at once), shows live progress, skips blank entries, and keeps going
-past individual failures, reporting a summary at the end.
+rewrite over every non-empty project name, caption, and standalone item in one
+pass — useful before printing/copying the report. It confirms first (since it
+touches everything at once), shows live progress, skips blank entries, and
+keeps going past individual failures, reporting a summary at the end.
 
 To set it up:
 

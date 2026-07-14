@@ -640,6 +640,12 @@
 
   // ---- AI rewrite ----
 
+  var NO_INVENTING_RULE =
+    "Use only what is given in the source text below — do not add facts, numbers, dates, " +
+    "ticket references, names, causes, outcomes, or next steps that are not explicitly stated in it. " +
+    "If the source is vague or incomplete, keep the rewrite equally vague rather than filling gaps " +
+    "with plausible-sounding detail. When in doubt, prefer under-stating over guessing.";
+
   function buildRewritePrompt(label, contextName, extraContext) {
     return "You are assisting with a technical Power BI / IT project status report used as meeting " +
       'minutes: entries are talking points to be discussed live, so rewrite the following "' + label +
@@ -647,9 +653,18 @@
       "using correct domain terminology (e.g. data model, refresh, pipeline, access, workspace) where " +
       "it fits the source text, and keep enough concrete detail (what changed, what's blocking, what's " +
       "next) that the point stands on its own for someone reading it before the meeting." +
-      (extraContext ? " " + extraContext : "") + " Do not invent facts, numbers, ticket references, " +
-      "or details that are not present in the source text, and do not pad it with filler. Return only " +
-      "the rewritten text, with no preamble, commentary, or quotation marks, and no bullet characters.";
+      (extraContext ? " " + extraContext : "") + " " + NO_INVENTING_RULE + " Do not pad it with " +
+      "filler. Return only the rewritten text, with no preamble, commentary, or quotation marks, and " +
+      "no bullet characters.";
+  }
+
+  function buildTitleRewritePrompt(contextOwner) {
+    return "You are tidying up a short project title for a technical status report" +
+      (contextOwner ? ' owned by "' + contextOwner + '"' : "") + ". Clean up the wording, casing, and " +
+      "grammar of the following project title without changing its subject or meaning, and without " +
+      "inventing a different or more specific name. Keep it concise — a short title, not a sentence " +
+      "or description. " + NO_INVENTING_RULE + " Return only the cleaned-up title, with no preamble, " +
+      "commentary, or quotation marks.";
   }
 
   function callGroq(apiKey, model, systemPrompt, userText) {
@@ -690,7 +705,7 @@
     });
   }
 
-  function runRewrite(button, label, contextName, textarea, extraContext) {
+  function runRewriteWithPrompt(button, systemPrompt, textarea) {
     var settings = loadAiSettings();
     if (!settings.apiKey) {
       openSettingsModal();
@@ -700,7 +715,6 @@
     var currentText = textarea.value.trim();
     if (!currentText) return;
 
-    var systemPrompt = buildRewritePrompt(label, contextName, extraContext);
     var originalLabel = button.textContent;
     button.disabled = true;
     button.textContent = "Rewriting...";
@@ -730,15 +744,18 @@
     return "This project is currently flagged as: " + flags.join(", ") + ".";
   }
 
+  function handleRewriteProjectName(button) {
+    runRewriteWithPrompt(button, buildTitleRewritePrompt(projectFields.owner.value.trim()), projectFields.name);
+  }
+
   function handleRewriteProjectDetail(button) {
     var project = findProject(projectFields.id.value);
-    runRewrite(
-      button,
+    var systemPrompt = buildRewritePrompt(
       "Latest Feedback / Status Caption",
       projectFields.name.value.trim(),
-      projectFields.detail,
       project ? projectFlagContext(project) : ""
     );
+    runRewriteWithPrompt(button, systemPrompt, projectFields.detail);
   }
 
   function handleRewriteItem(button) {
@@ -748,7 +765,8 @@
       var linked = findProject(itemFields.projectLink.value);
       if (linked) linkedName = linked.name;
     }
-    runRewrite(button, sectionInfo.label, linkedName, itemFields.text);
+    var systemPrompt = buildRewritePrompt(sectionInfo.label, linkedName, "");
+    runRewriteWithPrompt(button, systemPrompt, itemFields.text);
   }
 
   // ---- AI enhance all ----
@@ -756,13 +774,22 @@
   function collectEnhanceTasks() {
     var tasks = [];
     state.data.projects.forEach(function (p) {
+      if (p.name && p.name.trim()) {
+        tasks.push({
+          contextLabel: p.name,
+          getText: function () { return p.name; },
+          setText: function (v) { p.name = v; p.updatedAt = nowIso(); },
+          buildPrompt: function () { return buildTitleRewritePrompt(p.owner || ""); }
+        });
+      }
       if (p.detail && p.detail.trim()) {
         tasks.push({
+          contextLabel: p.name || "Latest Feedback / Status Caption",
           getText: function () { return p.detail; },
           setText: function (v) { p.detail = v; p.updatedAt = nowIso(); },
-          label: "Latest Feedback / Status Caption",
-          contextName: p.name || "",
-          extraContext: projectFlagContext(p)
+          buildPrompt: function () {
+            return buildRewritePrompt("Latest Feedback / Status Caption", p.name || "", projectFlagContext(p));
+          }
         });
       }
     });
@@ -770,11 +797,13 @@
       state.data[section].forEach(function (item) {
         if (!item.text || !item.text.trim()) return;
         tasks.push({
+          contextLabel: ITEM_SECTIONS[section].label,
           getText: function () { return item.text; },
           setText: function (v) { item.text = v; item.updatedAt = nowIso(); },
-          label: ITEM_SECTIONS[section].label,
-          contextName: item.projectId ? ((findProject(item.projectId) || {}).name || "") : "",
-          extraContext: ""
+          buildPrompt: function () {
+            var linkedName = item.projectId ? ((findProject(item.projectId) || {}).name || "") : "";
+            return buildRewritePrompt(ITEM_SECTIONS[section].label, linkedName, "");
+          }
         });
       });
     });
@@ -825,7 +854,7 @@
 
       var task = tasks[index];
       button.textContent = "Enhancing " + (index + 1) + " / " + tasks.length + "...";
-      var systemPrompt = buildRewritePrompt(task.label, task.contextName, task.extraContext);
+      var systemPrompt = task.buildPrompt();
 
       callGroq(settings.apiKey, settings.model, systemPrompt, task.getText().trim())
         .then(function (rewritten) {
@@ -833,7 +862,7 @@
         })
         .catch(function (err) {
           console.error(err);
-          failures.push((task.contextName || task.label) + ": " + err.message);
+          failures.push(task.contextLabel + ": " + err.message);
         })
         .then(function () {
           index += 1;
@@ -875,6 +904,9 @@
   itemFormEl.addEventListener("submit", handleSaveItem);
   document.getElementById("btnDeleteItem").addEventListener("click", handleDeleteItem);
 
+  document.querySelector('.btn-rewrite[data-field="name"]').addEventListener("click", function (e) {
+    handleRewriteProjectName(e.currentTarget);
+  });
   document.querySelector('.btn-rewrite[data-field="detail"]').addEventListener("click", function (e) {
     handleRewriteProjectDetail(e.currentTarget);
   });
