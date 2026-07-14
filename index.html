@@ -14,6 +14,9 @@
     <button id="btnPrintReport" class="btn btn-primary">🖨 Print Report</button>
     <button id="btnCopyReport" class="btn">📋 Copy Full Report</button>
     <button id="btnEnhanceAll" class="btn">✨ AI Enhance All</button>
+    <button id="btnCsvTemplate" class="btn">⬇ CSV Template</button>
+    <label class="btn" for="importCsvFile">⬆ Import CSV</label>
+    <input type="file" id="importCsvFile" accept=".csv,text/csv" hidden>
     <button id="btnExport" class="btn">Export Data</button>
     <label class="btn" for="importFile">Import Data</label>
     <input type="file" id="importFile" accept="application/json" hidden>
@@ -70,7 +73,10 @@
           <input type="text" id="nameInput" required placeholder="e.g. Sales Dashboard Revamp">
         </div>
         <div class="form-field form-field-shortcode">
-          <label for="shortcodeInput">Shortcode</label>
+          <div class="field-label-row">
+            <label for="shortcodeInput">Shortcode</label>
+            <button type="button" class="btn-rewrite" data-field="shortcode">✨</button>
+          </div>
           <input type="text" id="shortcodeInput" placeholder="e.g. SDR">
         </div>
       </div>

@@ -317,7 +317,7 @@ body {
 
 .form-row .form-field { flex: 1; }
 
-.form-field-shortcode { flex: 0 0 110px; }
+.form-field-shortcode { flex: 0 0 128px; }
 
 .form-field {
   margin-bottom: 16px;

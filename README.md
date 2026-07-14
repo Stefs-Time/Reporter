@@ -11,7 +11,8 @@ entirely in your browser on Windows.
 
 Data is saved automatically in the browser's local storage on that PC. Use
 **Export Data** regularly to back up your data to a `.json` file (and
-**Import Data** to restore or move it to another machine).
+**Import Data** to restore or move it to another machine). To bulk-load from a
+spreadsheet instead, use **CSV Template** / **Import CSV** (see below).
 
 ## How it's organised
 
@@ -56,29 +57,51 @@ Report** button in the header for the whole thing — handy for pasting into an
 email, Teams, or Slack. **Print Report** prints the same layout without the
 copy buttons.
 
+## Bulk load from CSV
+
+Click **⬇ CSV Template** to download a ready-to-fill spreadsheet, then
+**⬆ Import CSV** to load it back in. **Importing a CSV replaces all current
+data** (export a JSON backup first if you want to keep it).
+
+The template is one unified sheet with a **Type** column:
+
+- Rows with `Type = Project` fill in Owner, Project Name, Shortcode, the
+  Detail / Description (put multiple highlight points in one cell separated by
+  ` | ` or line breaks), and the flag columns Highlight / At Risk / On Hold
+  (`Yes`/`No`).
+- Rows with `Type = Risk`, `On Hold`, `IT Support`, or `Power BI` fill in the
+  Detail / Description (the item text) and optionally a **Linked Project
+  Shortcode** to tie the item to one of the projects in the sheet.
+
+Blank or unrecognised-Type rows are skipped, and items whose linked shortcode
+doesn't match any project are imported unlinked — the import shows a summary of
+both before you confirm.
+
 ## AI rewrite (optional)
 
-The Project Name and Latest Feedback caption on a project, and the description
-on any standalone item, each have a **✨ Rewrite** button that sends the
-current text to the free [Groq](https://console.groq.com) API and replaces it
-with a reworded version. Project Name gets a lighter touch — tidied wording,
+The Project Name, Shortcode, and Latest Feedback caption on a project, and the
+description on any standalone item, each have a **✨ Rewrite** button that sends
+the current text to the free [Groq](https://console.groq.com) API and replaces
+it with a reworded version. Project Name gets a lighter touch — tidied wording,
 casing, and grammar only, without changing the subject or inventing a
-different name. Everything else is reworded in a semi-humanized but still
-corporate voice (like a colleague talking, not a press release), detailed
-enough that the point stands on its own as a meeting-minutes-style talking
-point — and if the caption has multiple lines, each line is treated as its
-own point and rewritten one-for-one. It's also told never to repeat the
-project/owner name inside the rewritten text, since that's already shown as
-the heading. In every case it only rewrites what's there — it's instructed to
-use only the facts, numbers, and details already present in the source text,
-and to keep things equally vague rather than invent specifics when the source
-is vague.
+different name. The Shortcode ✨ generates a short uppercase code (2–5
+characters) derived from the project name. Everything else is reworded in a
+semi-humanized but still corporate voice (like a colleague talking, not a
+press release), detailed enough that the point stands on its own as a
+meeting-minutes-style talking point — and if the caption has multiple lines,
+each line is treated as its own point and rewritten one-for-one. It's also told
+never to repeat the project/owner name inside the rewritten text, since that's
+already shown as the heading. In every case it only rewrites what's there —
+it's instructed to use only the facts, numbers, and details already present in
+the source text, and to keep things equally vague rather than invent specifics
+when the source is vague.
 
 There's also an **✨ AI Enhance All** button (top header) that runs the same
-rewrite over every non-empty project name, caption, and standalone item in one
-pass — useful before printing/copying the report. It confirms first (since it
-touches everything at once), shows live progress, skips blank entries, and
-keeps going past individual failures, reporting a summary at the end.
+rewrite over every project (name, shortcode, and caption) and every standalone
+item in one pass — useful before printing/copying the report. It confirms first
+(since it touches everything at once), shows live progress, skips blank
+entries, and keeps going past individual failures, reporting a summary at the
+end.
 
 To set it up:
 

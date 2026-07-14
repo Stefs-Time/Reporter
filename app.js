@@ -738,6 +738,194 @@
     reader.readAsText(file);
   }
 
+  // ---- CSV template / import ----
+
+  var CSV_HEADERS = [
+    "Type", "Owner", "Project Name", "Shortcode", "Detail / Description",
+    "Highlight", "At Risk", "On Hold", "Linked Project Shortcode"
+  ];
+
+  function csvEscape(v) {
+    v = v == null ? "" : String(v);
+    if (/[",\n\r]/.test(v)) return '"' + v.replace(/"/g, '""') + '"';
+    return v;
+  }
+
+  function csvTemplateContent() {
+    var rows = [
+      CSV_HEADERS,
+      ["Project", "Stefan Botha", "Sales Dashboard Revamp", "SDR", "Executive sign-off received. | DAX build underway.", "Yes", "No", "No", ""],
+      ["Project", "Amy Chen", "Inventory Forecast Model", "IFM", "Model accuracy validated against Q2 actuals.", "No", "Yes", "No", ""],
+      ["Project", "Amy Chen", "HR Attrition Report", "HAR", "Paused pending updated data source access.", "No", "No", "Yes", ""],
+      ["Risk", "", "", "", "Source system access delayed by two weeks.", "", "", "", "IFM"],
+      ["On Hold", "", "", "", "Vendor confirming licence terms.", "", "", "", ""],
+      ["IT Support", "", "", "", "VPN access request for contractor - INC0045821.", "", "", "", "SDR"],
+      ["Power BI", "", "", "", "Workspace licence request - HD-1123.", "", "", "", ""]
+    ];
+    return rows.map(function (r) { return r.map(csvEscape).join(","); }).join("\r\n") + "\r\n";
+  }
+
+  function downloadCsvTemplate() {
+    var blob = new Blob([csvTemplateContent()], { type: "text/csv" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "project-feedback-tracker-template.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function parseCsv(text) {
+    var rows = [];
+    var row = [];
+    var field = "";
+    var inQuotes = false;
+    var i = 0;
+    var len = text.length;
+    while (i < len) {
+      var c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+          inQuotes = false; i++; continue;
+        }
+        field += c; i++; continue;
+      }
+      if (c === '"') { inQuotes = true; i++; continue; }
+      if (c === ",") { row.push(field); field = ""; i++; continue; }
+      if (c === "\r") { i++; continue; }
+      if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i++; continue; }
+      field += c; i++;
+    }
+    if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+    return rows;
+  }
+
+  function normHeader(h) {
+    return (h || "").toLowerCase().replace(/[\s_/]+/g, " ").trim();
+  }
+
+  function headerIndexMap(headerRow) {
+    var map = {};
+    headerRow.forEach(function (h, idx) { map[normHeader(h)] = idx; });
+    return map;
+  }
+
+  function colValue(row, map, names) {
+    for (var i = 0; i < names.length; i++) {
+      var idx = map[names[i]];
+      if (idx !== undefined && row[idx] !== undefined) return row[idx].trim();
+    }
+    return "";
+  }
+
+  function parseBool(v) {
+    return /^(yes|y|true|1|x|✓)$/i.test((v || "").trim());
+  }
+
+  function typeToSection(v) {
+    var t = normHeader(v);
+    if (t.indexOf("project") === 0) return "project";
+    if (t.indexOf("risk") === 0) return "risks";
+    if (t.indexOf("hold") !== -1) return "onHold";
+    if (t.indexOf("it") === 0) return "itRequests";
+    if (t.indexOf("power") === 0) return "powerBi";
+    return null;
+  }
+
+  function detailToPoints(v) {
+    return (v || "")
+      .split(/\r?\n|\s*\|\s*/)
+      .map(function (s) { return s.trim(); })
+      .filter(function (s) { return s.length > 0; })
+      .join("\n");
+  }
+
+  function importCsv(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var rows = parseCsv(reader.result).filter(function (r) {
+          return r.some(function (c) { return (c || "").trim() !== ""; });
+        });
+        if (rows.length < 1) throw new Error("The file is empty.");
+
+        var map = headerIndexMap(rows[0]);
+        if (map["type"] === undefined) {
+          throw new Error('Missing a "Type" column. Download the CSV template for the expected format.');
+        }
+
+        var data = emptyData();
+        var shortcodeToId = {};
+        var pendingItems = [];
+        var skipped = 0;
+        var now = nowIso();
+
+        for (var r = 1; r < rows.length; r++) {
+          var row = rows[r];
+          var section = typeToSection(colValue(row, map, ["type"]));
+          if (!section) { skipped++; continue; }
+
+          if (section === "project") {
+            var name = colValue(row, map, ["project name", "name"]);
+            if (!name) { skipped++; continue; }
+            var shortcode = sanitizeShortcode(colValue(row, map, ["shortcode", "code"]));
+            var project = {
+              id: uid(),
+              owner: colValue(row, map, ["owner", "responsible owner"]),
+              name: name,
+              shortcode: shortcode,
+              detail: detailToPoints(colValue(row, map, ["detail description", "detail", "description", "latest feedback", "feedback"])),
+              flagHighlight: parseBool(colValue(row, map, ["highlight", "key highlight", "feature in key highlights"])),
+              flagRisk: parseBool(colValue(row, map, ["at risk", "risk", "flag as at risk"])),
+              flagOnHold: parseBool(colValue(row, map, ["on hold", "onhold", "flag as on hold"])),
+              createdAt: now,
+              updatedAt: now
+            };
+            data.projects.push(project);
+            if (shortcode) shortcodeToId[shortcode] = project.id;
+          } else {
+            var textVal = colValue(row, map, ["detail description", "description", "detail", "text"]);
+            if (!textVal) { skipped++; continue; }
+            pendingItems.push({
+              section: section,
+              text: textVal,
+              linkShortcode: sanitizeShortcode(colValue(row, map, ["linked project shortcode", "linked project", "linked shortcode", "link"]))
+            });
+          }
+        }
+
+        var unlinked = 0;
+        pendingItems.forEach(function (pi) {
+          var projectId = "";
+          if (pi.linkShortcode) {
+            if (shortcodeToId[pi.linkShortcode]) projectId = shortcodeToId[pi.linkShortcode];
+            else unlinked++;
+          }
+          data[pi.section].push({ id: uid(), text: pi.text, projectId: projectId, createdAt: now, updatedAt: now });
+        });
+
+        var itemCount = data.risks.length + data.onHold.length + data.itRequests.length + data.powerBi.length;
+        var summary = "Import will replace all current data with " + data.projects.length +
+          " project(s) and " + itemCount + " item(s).";
+        if (skipped) summary += "\n" + skipped + " row(s) will be skipped (blank or unrecognised Type).";
+        if (unlinked) summary += "\n" + unlinked + " item(s) reference a shortcode with no matching project and will be left unlinked.";
+        summary += "\n\nContinue?";
+        if (!confirm(summary)) return;
+
+        state.data = data;
+        state.selectedId = null;
+        saveData();
+        setActiveSection("projects");
+      } catch (e) {
+        alert("Could not import CSV: " + e.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
   // ---- AI rewrite settings ----
 
   var settingsModalEl = document.getElementById("settingsModal");
@@ -869,30 +1057,50 @@
     });
   }
 
-  function runRewriteWithPrompt(button, systemPrompt, textarea) {
+  function buildShortcodePrompt() {
+    return "You are creating a short project shortcode for a status report. From the project name " +
+      "given below, produce a concise uppercase abbreviation of 2 to 5 characters (letters, optionally " +
+      "with a digit, but no spaces or punctuation) that a reader could use to refer to the project — " +
+      "typically the initials of its main words. Derive it only from the given project name; do not " +
+      "introduce unrelated words or invent a different name. Return only the shortcode, nothing else.";
+  }
+
+  function sanitizeShortcode(v) {
+    v = (v || "").trim();
+    if (!v) return "";
+    // Prefer an existing all-caps alphanumeric token (e.g. "SDR" inside a longer reply).
+    var m = v.match(/\b[A-Z][A-Z0-9]{1,5}\b/);
+    if (m) return m[0];
+    // Otherwise take the last word-ish token and uppercase it.
+    var tokens = v.split(/[^A-Za-z0-9]+/).filter(Boolean);
+    var pick = tokens.length ? tokens[tokens.length - 1] : v;
+    return pick.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+  }
+
+  function runRewriteGeneric(button, systemPrompt, sourceText, applyResult) {
     var settings = loadAiSettings();
     if (!settings.apiKey) {
       openSettingsModal();
       return;
     }
 
-    var currentText = textarea.value.trim();
-    if (!currentText) return;
+    var text = (sourceText || "").trim();
+    if (!text) return;
 
     var originalLabel = button.textContent;
     button.disabled = true;
-    button.textContent = "Rewriting...";
+    button.textContent = "…";
     button.classList.remove("error");
 
-    callGroq(settings.apiKey, settings.model, systemPrompt, currentText)
+    callGroq(settings.apiKey, settings.model, systemPrompt, text)
       .then(function (rewritten) {
-        textarea.value = rewritten;
+        applyResult(rewritten);
         button.textContent = originalLabel;
         button.disabled = false;
       })
       .catch(function (err) {
         console.error(err);
-        button.textContent = "Failed - retry";
+        button.textContent = "Retry";
         button.classList.add("error");
         button.disabled = false;
         alert("Rewrite failed: " + err.message);
@@ -909,7 +1117,13 @@
   }
 
   function handleRewriteProjectName(button) {
-    runRewriteWithPrompt(button, buildTitleRewritePrompt(projectFields.owner.value.trim()), projectFields.name);
+    runRewriteGeneric(button, buildTitleRewritePrompt(projectFields.owner.value.trim()),
+      projectFields.name.value, function (v) { projectFields.name.value = v; });
+  }
+
+  function handleRewriteShortcode(button) {
+    runRewriteGeneric(button, buildShortcodePrompt(), projectFields.name.value,
+      function (v) { projectFields.shortcode.value = sanitizeShortcode(v); });
   }
 
   function handleRewriteProjectDetail(button) {
@@ -920,7 +1134,8 @@
       project ? projectFlagContext(project) : "",
       true
     );
-    runRewriteWithPrompt(button, systemPrompt, projectFields.detail);
+    runRewriteGeneric(button, systemPrompt, projectFields.detail.value,
+      function (v) { projectFields.detail.value = v; });
   }
 
   function handleRewriteItem(button) {
@@ -931,7 +1146,8 @@
       if (linked) linkedName = linked.name;
     }
     var systemPrompt = buildRewritePrompt(sectionInfo.label, linkedName, "");
-    runRewriteWithPrompt(button, systemPrompt, itemFields.text);
+    runRewriteGeneric(button, systemPrompt, itemFields.text.value,
+      function (v) { itemFields.text.value = v; });
   }
 
   // ---- AI enhance all ----
@@ -945,6 +1161,15 @@
           getText: function () { return p.name; },
           setText: function (v) { p.name = v; p.updatedAt = nowIso(); },
           buildPrompt: function () { return buildTitleRewritePrompt(p.owner || ""); }
+        });
+        tasks.push({
+          contextLabel: (p.name || "project") + " (shortcode)",
+          getText: function () { return p.name; },
+          setText: function (v) {
+            var code = sanitizeShortcode(v);
+            if (code) { p.shortcode = code; p.updatedAt = nowIso(); }
+          },
+          buildPrompt: function () { return buildShortcodePrompt(); }
         });
       }
       if (p.detail && p.detail.trim()) {
@@ -1059,6 +1284,12 @@
     if (!btn) return;
     handleCopyCategoryBlock(btn.getAttribute("data-category"), btn);
   });
+  document.getElementById("btnCsvTemplate").addEventListener("click", downloadCsvTemplate);
+  document.getElementById("importCsvFile").addEventListener("change", function (e) {
+    var file = e.target.files[0];
+    if (file) importCsv(file);
+    e.target.value = "";
+  });
   document.getElementById("btnExport").addEventListener("click", exportData);
   document.getElementById("importFile").addEventListener("change", function (e) {
     var file = e.target.files[0];
@@ -1074,6 +1305,9 @@
 
   document.querySelector('.btn-rewrite[data-field="name"]').addEventListener("click", function (e) {
     handleRewriteProjectName(e.currentTarget);
+  });
+  document.querySelector('.btn-rewrite[data-field="shortcode"]').addEventListener("click", function (e) {
+    handleRewriteShortcode(e.currentTarget);
   });
   document.querySelector('.btn-rewrite[data-field="detail"]').addEventListener("click", function (e) {
     handleRewriteProjectDetail(e.currentTarget);
