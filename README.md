@@ -97,11 +97,13 @@ the source text, and to keep things equally vague rather than invent specifics
 when the source is vague.
 
 There's also an **✨ AI Enhance All** button (top header) that runs the same
-rewrite over every project (name, shortcode, and caption) and every standalone
-item in one pass — useful before printing/copying the report. It confirms first
-(since it touches everything at once), shows live progress, skips blank
-entries, and keeps going past individual failures, reporting a summary at the
-end.
+rewrite over every project (name and caption) and every standalone item in one
+pass — useful before printing/copying the report. It also fills in a shortcode
+for any project that doesn't have one yet, but leaves existing shortcodes
+untouched (use the Shortcode ✨ button if you want to regenerate one). It
+confirms first (since it touches everything at once), shows live progress,
+skips blank entries, and keeps going past individual failures, reporting a
+summary at the end.
 
 To set it up:
 

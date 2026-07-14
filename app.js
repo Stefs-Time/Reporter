@@ -1162,15 +1162,17 @@
           setText: function (v) { p.name = v; p.updatedAt = nowIso(); },
           buildPrompt: function () { return buildTitleRewritePrompt(p.owner || ""); }
         });
-        tasks.push({
-          contextLabel: (p.name || "project") + " (shortcode)",
-          getText: function () { return p.name; },
-          setText: function (v) {
-            var code = sanitizeShortcode(v);
-            if (code) { p.shortcode = code; p.updatedAt = nowIso(); }
-          },
-          buildPrompt: function () { return buildShortcodePrompt(); }
-        });
+        if (!p.shortcode || !p.shortcode.trim()) {
+          tasks.push({
+            contextLabel: (p.name || "project") + " (shortcode)",
+            getText: function () { return p.name; },
+            setText: function (v) {
+              var code = sanitizeShortcode(v);
+              if (code) { p.shortcode = code; p.updatedAt = nowIso(); }
+            },
+            buildPrompt: function () { return buildShortcodePrompt(); }
+          });
+        }
       }
       if (p.detail && p.detail.trim()) {
         tasks.push({
