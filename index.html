@@ -11,8 +11,7 @@
 <header class="app-header no-print">
   <h1>Project Feedback Tracker</h1>
   <div class="header-actions">
-    <button id="btnNewProject" class="btn btn-primary">+ New Project</button>
-    <button id="btnPrintAll" class="btn">Print All</button>
+    <button id="btnPrintReport" class="btn btn-primary">🖨 Print Report</button>
     <button id="btnExport" class="btn">Export Data</button>
     <label class="btn" for="importFile">Import Data</label>
     <input type="file" id="importFile" accept="application/json" hidden>
@@ -23,17 +22,29 @@
 <div class="app-body">
 
   <aside class="sidebar no-print">
+    <nav class="section-nav">
+      <button type="button" class="nav-btn active" data-section="projects">Projects</button>
+      <button type="button" class="nav-btn" data-section="risks">Risks</button>
+      <button type="button" class="nav-btn" data-section="onHold">On Hold</button>
+      <button type="button" class="nav-btn" data-section="itRequests">IT Support Requests</button>
+      <button type="button" class="nav-btn" data-section="powerBi">Power BI Help Desk</button>
+    </nav>
+
     <div class="sidebar-search">
-      <input type="text" id="searchBox" placeholder="Search owner or project...">
+      <input type="text" id="searchBox" placeholder="Search...">
     </div>
-    <ul id="projectList" class="project-list"></ul>
+
+    <ul id="itemList" class="project-list"></ul>
+
+    <button type="button" id="btnNewItem" class="btn btn-primary btn-new-item">+ New</button>
   </aside>
 
   <main class="editor no-print" id="editorPane">
     <div id="emptyState" class="empty-state">
-      <p>Select a project on the left, or click <strong>+ New Project</strong> to add one.</p>
+      <p>Select an item on the left, or click <strong>+ New</strong> to add one.</p>
     </div>
 
+    <!-- Project form -->
     <form id="projectForm" class="project-form" hidden>
       <input type="hidden" id="projectId">
 
@@ -56,58 +67,44 @@
         <textarea id="detailInput" rows="2" placeholder="Short caption on where the project currently stands"></textarea>
       </div>
 
-      <div class="form-field">
-        <div class="field-label-row">
-          <label for="highlightsInput">Key Highlights</label>
-          <button type="button" class="btn-rewrite" data-field="highlights">✨ Rewrite</button>
-        </div>
-        <textarea id="highlightsInput" rows="3" placeholder="One item per line"></textarea>
+      <div class="form-field flags-row">
+        <label class="flag-checkbox"><input type="checkbox" id="flagHighlightInput"> ⭐ Feature in Key Highlights</label>
+        <label class="flag-checkbox"><input type="checkbox" id="flagRiskInput"> ⚠️ Flag as At Risk</label>
+        <label class="flag-checkbox"><input type="checkbox" id="flagOnHoldInput"> ⏸ Flag as On Hold</label>
       </div>
+      <p class="flag-hint">
+        Projects not flagged At Risk or On Hold automatically appear under "In Progress" on the report.
+      </p>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" id="btnDeleteProject" class="btn btn-danger">Delete</button>
+      </div>
+    </form>
+
+    <!-- Standalone item form: Risks / On Hold / IT Support Requests / Power BI Help Desk -->
+    <form id="itemForm" class="project-form" hidden>
+      <input type="hidden" id="itemId">
+      <input type="hidden" id="itemSection">
 
       <div class="form-field">
         <div class="field-label-row">
-          <label for="progressInput">In Progress</label>
-          <button type="button" class="btn-rewrite" data-field="progress">✨ Rewrite</button>
+          <label for="itemTextInput" id="itemTextLabel">Description</label>
+          <button type="button" class="btn-rewrite" id="btnRewriteItem">✨ Rewrite</button>
         </div>
-        <textarea id="progressInput" rows="3" placeholder="One item per line"></textarea>
+        <textarea id="itemTextInput" rows="3" placeholder="Describe the item"></textarea>
       </div>
 
       <div class="form-field">
-        <div class="field-label-row">
-          <label for="risksInput">Risks</label>
-          <button type="button" class="btn-rewrite" data-field="risks">✨ Rewrite</button>
-        </div>
-        <textarea id="risksInput" rows="3" placeholder="One item per line"></textarea>
-      </div>
-
-      <div class="form-field">
-        <div class="field-label-row">
-          <label for="onHoldInput">On Hold</label>
-          <button type="button" class="btn-rewrite" data-field="onHold">✨ Rewrite</button>
-        </div>
-        <textarea id="onHoldInput" rows="3" placeholder="One item per line"></textarea>
-      </div>
-
-      <div class="form-field">
-        <div class="field-label-row">
-          <label for="itRequestsInput">Support Requests Opened to IT</label>
-          <button type="button" class="btn-rewrite" data-field="itRequests">✨ Rewrite</button>
-        </div>
-        <textarea id="itRequestsInput" rows="3" placeholder="One item per line"></textarea>
-      </div>
-
-      <div class="form-field">
-        <div class="field-label-row">
-          <label for="powerBiInput">Open Help Desk Requests with Power BI Department</label>
-          <button type="button" class="btn-rewrite" data-field="powerBi">✨ Rewrite</button>
-        </div>
-        <textarea id="powerBiInput" rows="3" placeholder="One item per line"></textarea>
+        <label for="itemProjectLink">Linked Project (optional)</label>
+        <select id="itemProjectLink">
+          <option value="">None</option>
+        </select>
       </div>
 
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save</button>
-        <button type="button" id="btnPrintOne" class="btn">Print</button>
-        <button type="button" id="btnDelete" class="btn btn-danger">Delete</button>
+        <button type="button" id="btnDeleteItem" class="btn btn-danger">Delete</button>
       </div>
     </form>
   </main>

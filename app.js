@@ -1,47 +1,48 @@
 (function () {
   "use strict";
 
-  var STORAGE_KEY = "projectFeedbackTracker.projects";
+  var STORAGE_KEY = "projectFeedbackTracker.data.v2";
   var SETTINGS_KEY = "projectFeedbackTracker.aiSettings";
   var GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 
-  var SECTIONS = [
-    { key: "highlights", label: "Key Highlights", inputId: "highlightsInput" },
-    { key: "progress", label: "In Progress", inputId: "progressInput" },
-    { key: "risks", label: "Risks", inputId: "risksInput" },
-    { key: "onHold", label: "On Hold", inputId: "onHoldInput" },
-    { key: "itRequests", label: "Support Requests Opened to IT", inputId: "itRequestsInput" },
-    { key: "powerBi", label: "Open Help Desk Requests - Power BI Department", inputId: "powerBiInput" }
-  ];
-
-  var REWRITE_FIELDS = {
-    detail: { label: "Latest Feedback / Status Caption", inputId: "detailInput", isList: false }
+  var ITEM_SECTIONS = {
+    risks: { label: "Risk", listLabel: "Risks", printHeading: "Risks" },
+    onHold: { label: "On Hold Item", listLabel: "On Hold", printHeading: "On Hold" },
+    itRequests: { label: "IT Support Request", listLabel: "IT Support Requests", printHeading: "Support Requests Opened to IT" },
+    powerBi: { label: "Power BI Help Desk Request", listLabel: "Power BI Help Desk", printHeading: "Open Help Desk Requests - Power BI Department" }
   };
-  SECTIONS.forEach(function (s) {
-    REWRITE_FIELDS[s.key] = { label: s.label, inputId: s.inputId, isList: true };
-  });
 
   var state = {
-    projects: [],
+    data: { projects: [], risks: [], onHold: [], itRequests: [], powerBi: [] },
+    activeSection: "projects",
     selectedId: null
   };
 
-  function loadProjects() {
+  function emptyData() {
+    return { projects: [], risks: [], onHold: [], itRequests: [], powerBi: [] };
+  }
+
+  function loadData() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
-      state.projects = raw ? JSON.parse(raw) : [];
+      var parsed = raw ? JSON.parse(raw) : null;
+      state.data = Object.assign(emptyData(), parsed || {});
     } catch (e) {
       console.error("Failed to load saved data", e);
-      state.projects = [];
+      state.data = emptyData();
     }
   }
 
-  function saveProjects() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.projects));
+  function saveData() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data));
   }
 
   function uid() {
-    return "p_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+    return "id_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+  }
+
+  function nowIso() {
+    return new Date().toISOString();
   }
 
   function formatDate(iso) {
@@ -51,218 +52,347 @@
       " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
 
-  function linesToArray(text) {
-    return (text || "")
-      .split("\n")
-      .map(function (l) { return l.trim(); })
-      .filter(function (l) { return l.length > 0; });
+  function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.textContent = str || "";
+    return div.innerHTML;
+  }
+
+  function currentArray(section) {
+    return state.data[section];
+  }
+
+  function findProject(id) {
+    return state.data.projects.find(function (p) { return p.id === id; });
+  }
+
+  // ---- Sidebar nav ----
+
+  var navButtons = document.querySelectorAll(".nav-btn");
+  var searchBoxEl = document.getElementById("searchBox");
+  var itemListEl = document.getElementById("itemList");
+  var btnNewItem = document.getElementById("btnNewItem");
+
+  function setActiveSection(section) {
+    state.activeSection = section;
+    state.selectedId = null;
+    navButtons.forEach(function (btn) {
+      btn.classList.toggle("active", btn.getAttribute("data-section") === section);
+    });
+    searchBoxEl.value = "";
+    btnNewItem.textContent = section === "projects" ? "+ New Project" : "+ New " + ITEM_SECTIONS[section].label;
+    renderList();
+    showSelected();
   }
 
   // ---- Rendering: sidebar list ----
 
-  var projectListEl = document.getElementById("projectList");
-  var searchBoxEl = document.getElementById("searchBox");
-
   function renderList() {
     var filter = (searchBoxEl.value || "").toLowerCase();
-    var items = state.projects
-      .filter(function (p) {
-        return p.name.toLowerCase().indexOf(filter) !== -1 ||
-          p.owner.toLowerCase().indexOf(filter) !== -1;
-      })
-      .sort(function (a, b) {
-        return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+    itemListEl.innerHTML = "";
+
+    if (state.activeSection === "projects") {
+      var projects = state.data.projects
+        .filter(function (p) {
+          return p.name.toLowerCase().indexOf(filter) !== -1 ||
+            p.owner.toLowerCase().indexOf(filter) !== -1;
+        })
+        .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); });
+
+      projects.forEach(function (p) {
+        var li = document.createElement("li");
+        if (p.id === state.selectedId) li.className = "active";
+        var badges = "";
+        if (p.flagHighlight) badges += '<span class="badge badge-highlight">Highlight</span>';
+        if (p.flagRisk) badges += '<span class="badge badge-risk">At Risk</span>';
+        if (p.flagOnHold) badges += '<span class="badge badge-onhold">On Hold</span>';
+        li.innerHTML =
+          '<div class="li-name"></div>' +
+          '<div class="li-owner"></div>' +
+          '<div class="li-badges">' + badges + "</div>" +
+          '<div class="li-updated"></div>';
+        li.querySelector(".li-name").textContent = p.name || "Untitled Project";
+        li.querySelector(".li-owner").textContent = p.owner || "Unassigned";
+        li.querySelector(".li-updated").textContent = p.updatedAt ? "Updated " + formatDate(p.updatedAt) : "";
+        li.addEventListener("click", function () { selectItem(p.id); });
+        itemListEl.appendChild(li);
       });
 
-    projectListEl.innerHTML = "";
+      if (projects.length === 0) {
+        appendEmptyListMessage(state.data.projects.length === 0 ? "No projects yet." : "No matches.");
+      }
+      return;
+    }
 
-    items.forEach(function (p) {
+    var items = currentArray(state.activeSection)
+      .filter(function (item) { return item.text.toLowerCase().indexOf(filter) !== -1; })
+      .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); });
+
+    items.forEach(function (item) {
       var li = document.createElement("li");
-      if (p.id === state.selectedId) li.className = "active";
+      if (item.id === state.selectedId) li.className = "active";
+      var linkedProject = item.projectId ? findProject(item.projectId) : null;
       li.innerHTML =
         '<div class="li-name"></div>' +
         '<div class="li-owner"></div>' +
         '<div class="li-updated"></div>';
-      li.querySelector(".li-name").textContent = p.name;
-      li.querySelector(".li-owner").textContent = p.owner;
-      li.querySelector(".li-updated").textContent = p.updatedAt ? "Updated " + formatDate(p.updatedAt) : "";
-      li.addEventListener("click", function () { selectProject(p.id); });
-      projectListEl.appendChild(li);
+      var preview = item.text || "(empty)";
+      li.querySelector(".li-name").textContent = preview.length > 70 ? preview.slice(0, 70) + "..." : preview;
+      li.querySelector(".li-owner").textContent = linkedProject ? "Linked: " + linkedProject.name : "";
+      li.querySelector(".li-updated").textContent = item.updatedAt ? "Updated " + formatDate(item.updatedAt) : "";
+      li.addEventListener("click", function () { selectItem(item.id); });
+      itemListEl.appendChild(li);
     });
 
     if (items.length === 0) {
-      var empty = document.createElement("li");
-      empty.style.color = "#9aa0a6";
-      empty.style.cursor = "default";
-      empty.textContent = state.projects.length === 0 ? "No projects yet." : "No matches.";
-      projectListEl.appendChild(empty);
+      appendEmptyListMessage(currentArray(state.activeSection).length === 0 ? "None logged yet." : "No matches.");
     }
   }
 
-  // ---- Editor form ----
+  function appendEmptyListMessage(text) {
+    var empty = document.createElement("li");
+    empty.style.color = "#9aa0a6";
+    empty.style.cursor = "default";
+    empty.textContent = text;
+    itemListEl.appendChild(empty);
+  }
+
+  // ---- Project form ----
 
   var emptyStateEl = document.getElementById("emptyState");
-  var formEl = document.getElementById("projectForm");
-  var fields = {
+  var projectFormEl = document.getElementById("projectForm");
+  var itemFormEl = document.getElementById("itemForm");
+
+  var projectFields = {
     id: document.getElementById("projectId"),
     owner: document.getElementById("ownerInput"),
     name: document.getElementById("nameInput"),
     detail: document.getElementById("detailInput"),
-    highlights: document.getElementById("highlightsInput"),
-    progress: document.getElementById("progressInput"),
-    risks: document.getElementById("risksInput"),
-    onHold: document.getElementById("onHoldInput"),
-    itRequests: document.getElementById("itRequestsInput"),
-    powerBi: document.getElementById("powerBiInput")
+    flagHighlight: document.getElementById("flagHighlightInput"),
+    flagRisk: document.getElementById("flagRiskInput"),
+    flagOnHold: document.getElementById("flagOnHoldInput")
   };
 
-  function selectProject(id) {
-    state.selectedId = id;
-    var project = state.projects.find(function (p) { return p.id === id; });
+  var itemFields = {
+    id: document.getElementById("itemId"),
+    section: document.getElementById("itemSection"),
+    text: document.getElementById("itemTextInput"),
+    label: document.getElementById("itemTextLabel"),
+    projectLink: document.getElementById("itemProjectLink")
+  };
 
-    if (!project) {
-      formEl.hidden = true;
+  function showSelected() {
+    var id = state.selectedId;
+
+    if (!id) {
+      projectFormEl.hidden = true;
+      itemFormEl.hidden = true;
       emptyStateEl.hidden = false;
-      renderList();
       return;
     }
 
     emptyStateEl.hidden = true;
-    formEl.hidden = false;
 
-    fields.id.value = project.id;
-    fields.owner.value = project.owner || "";
-    fields.name.value = project.name || "";
-    fields.detail.value = project.detail || "";
-    fields.highlights.value = project.highlights || "";
-    fields.progress.value = project.progress || "";
-    fields.risks.value = project.risks || "";
-    fields.onHold.value = project.onHold || "";
-    fields.itRequests.value = project.itRequests || "";
-    fields.powerBi.value = project.powerBi || "";
+    if (state.activeSection === "projects") {
+      var project = findProject(id);
+      if (!project) { state.selectedId = null; showSelected(); return; }
+      itemFormEl.hidden = true;
+      projectFormEl.hidden = false;
 
+      projectFields.id.value = project.id;
+      projectFields.owner.value = project.owner || "";
+      projectFields.name.value = project.name || "";
+      projectFields.detail.value = project.detail || "";
+      projectFields.flagHighlight.checked = !!project.flagHighlight;
+      projectFields.flagRisk.checked = !!project.flagRisk;
+      projectFields.flagOnHold.checked = !!project.flagOnHold;
+    } else {
+      var item = currentArray(state.activeSection).find(function (i) { return i.id === id; });
+      if (!item) { state.selectedId = null; showSelected(); return; }
+      projectFormEl.hidden = true;
+      itemFormEl.hidden = false;
+
+      itemFields.id.value = item.id;
+      itemFields.section.value = state.activeSection;
+      itemFields.text.value = item.text || "";
+      itemFields.label.textContent = ITEM_SECTIONS[state.activeSection].label + " Description";
+      populateProjectLinkOptions();
+      itemFields.projectLink.value = item.projectId || "";
+    }
+  }
+
+  function populateProjectLinkOptions() {
+    var current = itemFields.projectLink.value;
+    itemFields.projectLink.innerHTML = '<option value="">None</option>';
+    state.data.projects
+      .slice()
+      .sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); })
+      .forEach(function (p) {
+        var opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name || "Untitled Project";
+        itemFields.projectLink.appendChild(opt);
+      });
+    itemFields.projectLink.value = current;
+  }
+
+  function selectItem(id) {
+    state.selectedId = id;
     renderList();
+    showSelected();
   }
 
-  function newProject() {
-    var project = {
-      id: uid(),
-      owner: "",
-      name: "",
-      detail: "",
-      highlights: "",
-      progress: "",
-      risks: "",
-      onHold: "",
-      itRequests: "",
-      powerBi: "",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    state.projects.push(project);
-    saveProjects();
-    selectProject(project.id);
-    fields.owner.focus();
+  function handleNewItem() {
+    var now = nowIso();
+    if (state.activeSection === "projects") {
+      var project = {
+        id: uid(),
+        owner: "",
+        name: "",
+        detail: "",
+        flagHighlight: false,
+        flagRisk: false,
+        flagOnHold: false,
+        createdAt: now,
+        updatedAt: now
+      };
+      state.data.projects.push(project);
+      saveData();
+      selectItem(project.id);
+      projectFields.owner.focus();
+    } else {
+      var item = { id: uid(), text: "", projectId: "", createdAt: now, updatedAt: now };
+      currentArray(state.activeSection).push(item);
+      saveData();
+      selectItem(item.id);
+      itemFields.text.focus();
+    }
   }
 
-  function handleSave(e) {
+  function handleSaveProject(e) {
     e.preventDefault();
-    var id = fields.id.value;
-    var project = state.projects.find(function (p) { return p.id === id; });
+    var project = findProject(projectFields.id.value);
     if (!project) return;
 
-    project.owner = fields.owner.value.trim();
-    project.name = fields.name.value.trim();
-    project.detail = fields.detail.value.trim();
-    project.highlights = fields.highlights.value;
-    project.progress = fields.progress.value;
-    project.risks = fields.risks.value;
-    project.onHold = fields.onHold.value;
-    project.itRequests = fields.itRequests.value;
-    project.powerBi = fields.powerBi.value;
-    project.updatedAt = new Date().toISOString();
+    project.owner = projectFields.owner.value.trim();
+    project.name = projectFields.name.value.trim();
+    project.detail = projectFields.detail.value.trim();
+    project.flagHighlight = projectFields.flagHighlight.checked;
+    project.flagRisk = projectFields.flagRisk.checked;
+    project.flagOnHold = projectFields.flagOnHold.checked;
+    project.updatedAt = nowIso();
 
-    saveProjects();
+    saveData();
     renderList();
   }
 
-  function handleDelete() {
-    var id = fields.id.value;
-    var project = state.projects.find(function (p) { return p.id === id; });
+  function handleDeleteProject() {
+    var id = projectFields.id.value;
+    var project = findProject(id);
     if (!project) return;
-    if (!confirm('Delete project "' + project.name + '"? This cannot be undone.')) return;
+    if (!confirm('Delete project "' + project.name + '"? Linked risk/on-hold/request items will keep their text but lose the project link. This cannot be undone.')) return;
 
-    state.projects = state.projects.filter(function (p) { return p.id !== id; });
+    state.data.projects = state.data.projects.filter(function (p) { return p.id !== id; });
+    ["risks", "onHold", "itRequests", "powerBi"].forEach(function (section) {
+      state.data[section].forEach(function (item) {
+        if (item.projectId === id) item.projectId = "";
+      });
+    });
     state.selectedId = null;
-    saveProjects();
-    selectProject(null);
+    saveData();
+    renderList();
+    showSelected();
   }
 
-  // ---- Print ----
+  function handleSaveItem(e) {
+    e.preventDefault();
+    var section = itemFields.section.value;
+    var item = currentArray(section).find(function (i) { return i.id === itemFields.id.value; });
+    if (!item) return;
+
+    item.text = itemFields.text.value.trim();
+    item.projectId = itemFields.projectLink.value || "";
+    item.updatedAt = nowIso();
+
+    saveData();
+    renderList();
+  }
+
+  function handleDeleteItem() {
+    var section = itemFields.section.value;
+    var id = itemFields.id.value;
+    if (!confirm("Delete this item? This cannot be undone.")) return;
+
+    state.data[section] = state.data[section].filter(function (i) { return i.id !== id; });
+    state.selectedId = null;
+    saveData();
+    renderList();
+    showSelected();
+  }
+
+  // ---- Print report ----
 
   var printAreaEl = document.getElementById("printArea");
 
-  function buildSectionHtml(project) {
-    return SECTIONS.map(function (section) {
-      var items = linesToArray(project[section.key]);
-      var body = items.length
-        ? "<ul>" + items.map(function (i) { return "<li>" + escapeHtml(i) + "</li>"; }).join("") + "</ul>"
-        : '<div class="none">None reported</div>';
-      return '<div class="print-section"><h3>' + escapeHtml(section.label) + "</h3>" + body + "</div>";
-    }).join("");
+  function renderProjectEntry(p) {
+    var caption = p.detail ? " — " + escapeHtml(p.detail) : "";
+    return "<li><strong>" + escapeHtml(p.name || "Untitled Project") + "</strong> (" +
+      escapeHtml(p.owner || "Unassigned") + ")" + caption + "</li>";
   }
 
-  function escapeHtml(str) {
-    var div = document.createElement("div");
-    div.textContent = str;
-    return div.innerHTML;
+  function renderStandaloneEntry(item) {
+    var linked = item.projectId ? findProject(item.projectId) : null;
+    var linkedHtml = linked ? " <em>— Related project: " + escapeHtml(linked.name) + "</em>" : "";
+    return "<li>" + escapeHtml(item.text) + linkedHtml + "</li>";
   }
 
-  function buildCardHtml(project) {
-    var detailHtml = project.detail
-      ? "<div class=\"print-detail\">" + escapeHtml(project.detail) + "</div>"
-      : "";
+  function renderPrintSection(heading, htmlItems) {
+    var body = htmlItems.length
+      ? "<ul>" + htmlItems.join("") + "</ul>"
+      : '<div class="none">None reported</div>';
+    return '<div class="print-section"><h3>' + escapeHtml(heading) + "</h3>" + body + "</div>";
+  }
+
+  function buildReportHtml() {
+    var projects = state.data.projects;
+
+    var highlights = projects.filter(function (p) { return p.flagHighlight; }).map(renderProjectEntry);
+    var inProgress = projects.filter(function (p) { return !p.flagRisk && !p.flagOnHold; }).map(renderProjectEntry);
+    var risks = projects.filter(function (p) { return p.flagRisk; }).map(renderProjectEntry)
+      .concat(state.data.risks.map(renderStandaloneEntry));
+    var onHold = projects.filter(function (p) { return p.flagOnHold; }).map(renderProjectEntry)
+      .concat(state.data.onHold.map(renderStandaloneEntry));
+    var itRequests = state.data.itRequests.map(renderStandaloneEntry);
+    var powerBi = state.data.powerBi.map(renderStandaloneEntry);
+
     return (
+      '<h1 style="font-size:20px;margin-bottom:16px;">Project Feedback Report - ' + new Date().toLocaleDateString() + "</h1>" +
       '<div class="print-card">' +
-      "<h2>" + escapeHtml(project.name || "Untitled Project") + "</h2>" +
-      '<div class="print-meta">Owner: ' + escapeHtml(project.owner || "Unassigned") +
-      " &nbsp;|&nbsp; Last updated: " + formatDate(project.updatedAt) + "</div>" +
-      detailHtml +
-      buildSectionHtml(project) +
+      renderPrintSection("Key Highlights", highlights) +
+      renderPrintSection("In Progress", inProgress) +
+      renderPrintSection("Risks", risks) +
+      renderPrintSection("On Hold", onHold) +
+      renderPrintSection(ITEM_SECTIONS.itRequests.printHeading, itRequests) +
+      renderPrintSection(ITEM_SECTIONS.powerBi.printHeading, powerBi) +
       "</div>"
     );
   }
 
-  function printProject(id) {
-    var project = state.projects.find(function (p) { return p.id === id; });
-    if (!project) return;
-    printAreaEl.innerHTML =
-      '<h1 style="font-size:20px;margin-bottom:16px;">Project Feedback Report</h1>' +
-      buildCardHtml(project);
-    window.print();
-  }
-
-  function printAll() {
-    if (state.projects.length === 0) {
-      alert("There are no projects to print yet.");
+  function printReport() {
+    if (state.data.projects.length === 0 &&
+        state.data.risks.length === 0 && state.data.onHold.length === 0 &&
+        state.data.itRequests.length === 0 && state.data.powerBi.length === 0) {
+      alert("There is nothing to report yet.");
       return;
     }
-    var sorted = state.projects.slice().sort(function (a, b) {
-      return (a.name || "").localeCompare(b.name || "");
-    });
-    var html =
-      '<h1 style="font-size:20px;margin-bottom:16px;">Project Feedback Report - ' +
-      new Date().toLocaleDateString() +
-      "</h1>";
-    html += sorted.map(buildCardHtml).join("");
-    printAreaEl.innerHTML = html;
+    printAreaEl.innerHTML = buildReportHtml();
     window.print();
   }
 
   // ---- Export / Import ----
 
   function exportData() {
-    var blob = new Blob([JSON.stringify(state.projects, null, 2)], { type: "application/json" });
+    var blob = new Blob([JSON.stringify(state.data, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
@@ -277,20 +407,20 @@
     var reader = new FileReader();
     reader.onload = function () {
       try {
-        var data = JSON.parse(reader.result);
-        if (!Array.isArray(data)) throw new Error("Invalid file format");
-        var valid = data.every(function (p) { return p && typeof p === "object" && p.id; });
-        if (!valid) throw new Error("Invalid project data");
-
-        if (state.projects.length > 0) {
-          if (!confirm("Importing will replace all " + state.projects.length + " existing project(s). Continue?")) {
-            return;
-          }
+        var parsed = JSON.parse(reader.result);
+        if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.projects)) {
+          throw new Error("Invalid file format");
         }
-        state.projects = data;
+        var hasExisting = state.data.projects.length + state.data.risks.length +
+          state.data.onHold.length + state.data.itRequests.length + state.data.powerBi.length > 0;
+        if (hasExisting) {
+          if (!confirm("Importing will replace all existing data. Continue?")) return;
+        }
+        state.data = Object.assign(emptyData(), parsed);
         state.selectedId = null;
-        saveProjects();
-        selectProject(null);
+        saveData();
+        renderList();
+        showSelected();
       } catch (e) {
         alert("Could not import file: " + e.message);
       }
@@ -338,21 +468,13 @@
 
   // ---- AI rewrite ----
 
-  function buildRewritePrompt(fieldInfo, ownerName, projectName) {
-    var base =
-      "You are assisting with a professional Power BI / IT project status report for internal " +
-      'business stakeholders. Rewrite the "' + fieldInfo.label + '" content for the project "' +
-      (projectName || "this project") + '" (owner: ' + (ownerName || "unassigned") + ") so it reads " +
-      "as clear, concise, professional language suitable for a technical/business status report. " +
-      "Do not invent facts, numbers, ticket references, or details that are not present in the source text. " +
-      "Do not add any preamble, commentary, or quotation marks around the output.";
-    if (fieldInfo.isList) {
-      base += " The input is a list with one item per line. Return the same number of items, " +
-        "rewritten, one per line, with no bullet characters or numbering.";
-    } else {
-      base += " Return a single rewritten sentence or two.";
-    }
-    return base;
+  function buildRewritePrompt(label, contextName) {
+    return "You are assisting with a professional Power BI / IT project status report for internal " +
+      'business stakeholders. Rewrite the following "' + label + '" text' +
+      (contextName ? ' for "' + contextName + '"' : "") + " so it reads as clear, concise, " +
+      "professional language suitable for a technical/business status report. Do not invent facts, " +
+      "numbers, ticket references, or details that are not present in the source text. Return only " +
+      "the rewritten text, with no preamble, commentary, or quotation marks, and no bullet characters.";
   }
 
   function callGroq(apiKey, model, systemPrompt, userText) {
@@ -384,26 +506,17 @@
     });
   }
 
-  function handleRewriteClick(button) {
-    var fieldKey = button.getAttribute("data-field");
-    var fieldInfo = REWRITE_FIELDS[fieldKey];
-    if (!fieldInfo) return;
-
+  function runRewrite(button, label, contextName, textarea) {
     var settings = loadAiSettings();
     if (!settings.apiKey) {
       openSettingsModal();
       return;
     }
 
-    var textarea = fields[fieldKey];
-    var currentText = fieldInfo.isList
-      ? linesToArray(textarea.value).join("\n")
-      : textarea.value.trim();
-
+    var currentText = textarea.value.trim();
     if (!currentText) return;
 
-    var systemPrompt = buildRewritePrompt(fieldInfo, fields.owner.value.trim(), fields.name.value.trim());
-
+    var systemPrompt = buildRewritePrompt(label, contextName);
     var originalLabel = button.textContent;
     button.disabled = true;
     button.textContent = "Rewriting...";
@@ -424,22 +537,49 @@
       });
   }
 
+  function handleRewriteProjectDetail(button) {
+    runRewrite(button, "Latest Feedback / Status Caption", projectFields.name.value.trim(), projectFields.detail);
+  }
+
+  function handleRewriteItem(button) {
+    var sectionInfo = ITEM_SECTIONS[itemFields.section.value];
+    var linkedName = "";
+    if (itemFields.projectLink.value) {
+      var linked = findProject(itemFields.projectLink.value);
+      if (linked) linkedName = linked.name;
+    }
+    runRewrite(button, sectionInfo.label, linkedName, itemFields.text);
+  }
+
   // ---- Wiring ----
 
-  document.getElementById("btnNewProject").addEventListener("click", newProject);
-  document.getElementById("btnPrintAll").addEventListener("click", printAll);
-  document.getElementById("btnPrintOne").addEventListener("click", function () {
-    if (state.selectedId) printProject(state.selectedId);
+  navButtons.forEach(function (btn) {
+    btn.addEventListener("click", function () { setActiveSection(btn.getAttribute("data-section")); });
   });
-  document.getElementById("btnDelete").addEventListener("click", handleDelete);
+
+  btnNewItem.addEventListener("click", handleNewItem);
+  searchBoxEl.addEventListener("input", renderList);
+
+  document.getElementById("btnPrintReport").addEventListener("click", printReport);
   document.getElementById("btnExport").addEventListener("click", exportData);
   document.getElementById("importFile").addEventListener("change", function (e) {
     var file = e.target.files[0];
     if (file) importData(file);
     e.target.value = "";
   });
-  formEl.addEventListener("submit", handleSave);
-  searchBoxEl.addEventListener("input", renderList);
+
+  projectFormEl.addEventListener("submit", handleSaveProject);
+  document.getElementById("btnDeleteProject").addEventListener("click", handleDeleteProject);
+
+  itemFormEl.addEventListener("submit", handleSaveItem);
+  document.getElementById("btnDeleteItem").addEventListener("click", handleDeleteItem);
+
+  document.querySelector('.btn-rewrite[data-field="detail"]').addEventListener("click", function (e) {
+    handleRewriteProjectDetail(e.currentTarget);
+  });
+  document.getElementById("btnRewriteItem").addEventListener("click", function (e) {
+    handleRewriteItem(e.currentTarget);
+  });
 
   document.getElementById("btnSettings").addEventListener("click", openSettingsModal);
   document.getElementById("btnSaveSettings").addEventListener("click", handleSaveSettings);
@@ -448,13 +588,9 @@
     if (e.target === settingsModalEl) closeSettingsModal();
   });
 
-  document.querySelectorAll(".btn-rewrite").forEach(function (btn) {
-    btn.addEventListener("click", function () { handleRewriteClick(btn); });
-  });
-
   // ---- Init ----
 
-  loadProjects();
+  loadData();
   renderList();
-  selectProject(null);
+  showSelected();
 })();
