@@ -631,11 +631,12 @@
 
   // ---- AI rewrite ----
 
-  function buildRewritePrompt(label, contextName) {
+  function buildRewritePrompt(label, contextName, extraContext) {
     return "You are assisting with a professional Power BI / IT project status report for internal " +
       'business stakeholders. Rewrite the following "' + label + '" text' +
       (contextName ? ' for "' + contextName + '"' : "") + " so it reads as clear, concise, " +
-      "professional language suitable for a technical/business status report. Do not invent facts, " +
+      "professional language suitable for a technical/business status report." +
+      (extraContext ? " " + extraContext : "") + " Do not invent facts, " +
       "numbers, ticket references, or details that are not present in the source text. Return only " +
       "the rewritten text, with no preamble, commentary, or quotation marks, and no bullet characters.";
   }
@@ -678,7 +679,7 @@
     });
   }
 
-  function runRewrite(button, label, contextName, textarea) {
+  function runRewrite(button, label, contextName, textarea, extraContext) {
     var settings = loadAiSettings();
     if (!settings.apiKey) {
       openSettingsModal();
@@ -688,7 +689,7 @@
     var currentText = textarea.value.trim();
     if (!currentText) return;
 
-    var systemPrompt = buildRewritePrompt(label, contextName);
+    var systemPrompt = buildRewritePrompt(label, contextName, extraContext);
     var originalLabel = button.textContent;
     button.disabled = true;
     button.textContent = "Rewriting...";
@@ -709,8 +710,24 @@
       });
   }
 
+  function projectFlagContext(project) {
+    var flags = [];
+    if (project.flagHighlight) flags.push("a Key Highlight");
+    if (project.flagRisk) flags.push("At Risk");
+    if (project.flagOnHold) flags.push("On Hold");
+    if (!flags.length) return "";
+    return "This project is currently flagged as: " + flags.join(", ") + ".";
+  }
+
   function handleRewriteProjectDetail(button) {
-    runRewrite(button, "Latest Feedback / Status Caption", projectFields.name.value.trim(), projectFields.detail);
+    var project = findProject(projectFields.id.value);
+    runRewrite(
+      button,
+      "Latest Feedback / Status Caption",
+      projectFields.name.value.trim(),
+      projectFields.detail,
+      project ? projectFlagContext(project) : ""
+    );
   }
 
   function handleRewriteItem(button) {
@@ -721,6 +738,99 @@
       if (linked) linkedName = linked.name;
     }
     runRewrite(button, sectionInfo.label, linkedName, itemFields.text);
+  }
+
+  // ---- AI enhance all ----
+
+  function collectEnhanceTasks() {
+    var tasks = [];
+    state.data.projects.forEach(function (p) {
+      if (p.detail && p.detail.trim()) {
+        tasks.push({
+          getText: function () { return p.detail; },
+          setText: function (v) { p.detail = v; p.updatedAt = nowIso(); },
+          label: "Latest Feedback / Status Caption",
+          contextName: p.name || "",
+          extraContext: projectFlagContext(p)
+        });
+      }
+    });
+    ["risks", "onHold", "itRequests", "powerBi"].forEach(function (section) {
+      state.data[section].forEach(function (item) {
+        if (!item.text || !item.text.trim()) return;
+        tasks.push({
+          getText: function () { return item.text; },
+          setText: function (v) { item.text = v; item.updatedAt = nowIso(); },
+          label: ITEM_SECTIONS[section].label,
+          contextName: item.projectId ? ((findProject(item.projectId) || {}).name || "") : "",
+          extraContext: ""
+        });
+      });
+    });
+    return tasks;
+  }
+
+  function enhanceAllEntries(button) {
+    var settings = loadAiSettings();
+    if (!settings.apiKey) {
+      openSettingsModal();
+      return;
+    }
+
+    var tasks = collectEnhanceTasks();
+    if (!tasks.length) {
+      alert("There is no feedback text to enhance yet.");
+      return;
+    }
+    if (!confirm(
+      "This will send " + tasks.length + " entr" + (tasks.length === 1 ? "y" : "ies") +
+      " to Groq and replace each with an AI-reworded version. This cannot be undone automatically " +
+      "(export a backup first if you want to be able to revert). Continue?"
+    )) {
+      return;
+    }
+
+    var originalLabel = button.textContent;
+    button.disabled = true;
+    var failures = [];
+    var index = 0;
+
+    function runNext() {
+      if (index >= tasks.length) {
+        button.disabled = false;
+        button.textContent = originalLabel;
+        saveData();
+        renderList();
+        showSelected();
+        if (state.activeSection === "report") renderReportView();
+        if (failures.length) {
+          alert("Enhanced " + (tasks.length - failures.length) + " of " + tasks.length +
+            " entries. " + failures.length + " failed:\n" + failures.join("\n"));
+        } else {
+          alert("Enhanced all " + tasks.length + " entries.");
+        }
+        return;
+      }
+
+      var task = tasks[index];
+      button.textContent = "Enhancing " + (index + 1) + " / " + tasks.length + "...";
+      var systemPrompt = buildRewritePrompt(task.label, task.contextName, task.extraContext);
+
+      callGroq(settings.apiKey, settings.model, systemPrompt, task.getText().trim())
+        .then(function (rewritten) {
+          task.setText(rewritten);
+        })
+        .catch(function (err) {
+          console.error(err);
+          failures.push((task.contextName || task.label) + ": " + err.message);
+        })
+        .then(function () {
+          index += 1;
+          runNext();
+        });
+    }
+
+    runNext();
   }
 
   // ---- Wiring ----
@@ -759,6 +869,10 @@
   });
   document.getElementById("btnRewriteItem").addEventListener("click", function (e) {
     handleRewriteItem(e.currentTarget);
+  });
+
+  document.getElementById("btnEnhanceAll").addEventListener("click", function (e) {
+    enhanceAllEntries(e.currentTarget);
   });
 
   document.getElementById("btnSettings").addEventListener("click", openSettingsModal);
