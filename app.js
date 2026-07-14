@@ -87,6 +87,11 @@
 
   var sidebarListSectionEl = document.getElementById("sidebarListSection");
   var reportViewEl = document.getElementById("reportView");
+  var galleryViewEl = document.getElementById("galleryView");
+
+  function sectionTitle(section) {
+    return section === "projects" ? "Projects" : ITEM_SECTIONS[section].listLabel;
+  }
 
   function setActiveSection(section) {
     state.activeSection = section;
@@ -179,6 +184,121 @@
     itemListEl.appendChild(empty);
   }
 
+  // ---- Gallery (tiles in the main pane when nothing is selected) ----
+
+  function buildProjectTile(p) {
+    var tile = document.createElement("div");
+    tile.className = "gallery-tile";
+
+    var badges = "";
+    if (p.flagHighlight) badges += '<span class="badge badge-highlight">Highlight</span>';
+    if (p.flagRisk) badges += '<span class="badge badge-risk">At Risk</span>';
+    if (p.flagOnHold) badges += '<span class="badge badge-onhold">On Hold</span>';
+
+    var points = linesToArray(p.detail);
+    var pointsHtml = points.length
+      ? '<ul class="tile-points">' + points.map(function (pt) {
+          return "<li>" + escapeHtml(pt) + "</li>";
+        }).join("") + "</ul>"
+      : '<div class="tile-empty">No status caption yet.</div>';
+
+    tile.innerHTML =
+      '<div class="tile-title"></div>' +
+      '<div class="tile-owner"></div>' +
+      (badges ? '<div class="tile-badges">' + badges + "</div>" : "") +
+      pointsHtml;
+    tile.querySelector(".tile-title").textContent = projectDisplayName(p);
+    tile.querySelector(".tile-owner").textContent = p.owner || "Unassigned";
+    tile.addEventListener("click", function () { openProject(p.id); });
+    return tile;
+  }
+
+  function buildItemTile(item, section) {
+    var tile = document.createElement("div");
+    tile.className = "gallery-tile";
+    var linked = item.projectId ? findProject(item.projectId) : null;
+    tile.innerHTML =
+      '<div class="tile-text"></div>' +
+      (linked ? '<div class="tile-linked"></div>' : "");
+    tile.querySelector(".tile-text").textContent = item.text || "(empty)";
+    if (linked) tile.querySelector(".tile-linked").textContent = "Project: " + projectDisplayName(linked);
+    tile.addEventListener("click", function () { selectItem(item.id); });
+    return tile;
+  }
+
+  function galleryTilesFor(section, filter) {
+    var tiles = [];
+
+    function projectMatches(p) {
+      return p.name.toLowerCase().indexOf(filter) !== -1 ||
+        p.owner.toLowerCase().indexOf(filter) !== -1;
+    }
+    function itemMatches(item) {
+      return item.text.toLowerCase().indexOf(filter) !== -1;
+    }
+
+    if (section === "projects") {
+      state.data.projects
+        .slice()
+        .filter(projectMatches)
+        .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); })
+        .forEach(function (p) { tiles.push(buildProjectTile(p)); });
+      return tiles;
+    }
+
+    // Risks / On Hold also surface flagged projects; all four surface their own items.
+    var flagKey = section === "risks" ? "flagRisk" : (section === "onHold" ? "flagOnHold" : null);
+    if (flagKey) {
+      state.data.projects
+        .slice()
+        .filter(function (p) { return p[flagKey] && projectMatches(p); })
+        .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); })
+        .forEach(function (p) { tiles.push(buildProjectTile(p)); });
+    }
+
+    currentArray(section)
+      .slice()
+      .filter(itemMatches)
+      .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); })
+      .forEach(function (item) { tiles.push(buildItemTile(item, section)); });
+
+    return tiles;
+  }
+
+  function renderGallery() {
+    var section = state.activeSection;
+    var filter = (searchBoxEl.value || "").toLowerCase();
+    var tiles = galleryTilesFor(section, filter);
+
+    galleryViewEl.innerHTML = "";
+
+    if (tiles.length === 0) {
+      galleryViewEl.hidden = true;
+      emptyStateEl.hidden = false;
+      return;
+    }
+
+    emptyStateEl.hidden = true;
+    galleryViewEl.hidden = false;
+
+    var title = document.createElement("h2");
+    title.className = "gallery-title";
+    title.textContent = sectionTitle(section) + " (" + tiles.length + ")";
+    galleryViewEl.appendChild(title);
+
+    var grid = document.createElement("div");
+    grid.className = "gallery-grid";
+    tiles.forEach(function (t) { grid.appendChild(t); });
+    galleryViewEl.appendChild(grid);
+  }
+
+  function openProject(id) {
+    if (state.activeSection !== "projects") {
+      setActiveSection("projects");
+    }
+    selectItem(id);
+  }
+
   // ---- Project form ----
 
   var emptyStateEl = document.getElementById("emptyState");
@@ -211,6 +331,7 @@
       projectFormEl.hidden = true;
       itemFormEl.hidden = true;
       emptyStateEl.hidden = true;
+      galleryViewEl.hidden = true;
       reportViewEl.hidden = false;
       return;
     }
@@ -219,11 +340,12 @@
     if (!id) {
       projectFormEl.hidden = true;
       itemFormEl.hidden = true;
-      emptyStateEl.hidden = false;
+      renderGallery();
       return;
     }
 
     emptyStateEl.hidden = true;
+    galleryViewEl.hidden = true;
 
     if (state.activeSection === "projects") {
       var project = findProject(id);
@@ -923,7 +1045,10 @@
   });
 
   btnNewItem.addEventListener("click", handleNewItem);
-  searchBoxEl.addEventListener("input", renderList);
+  searchBoxEl.addEventListener("input", function () {
+    renderList();
+    if (!state.selectedId && state.activeSection !== "report") renderGallery();
+  });
 
   document.getElementById("btnPrintReport").addEventListener("click", printReport);
   document.getElementById("btnCopyReport").addEventListener("click", function (e) {

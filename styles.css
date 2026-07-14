@@ -428,6 +428,86 @@ body {
   margin: 12px 0 16px 0;
 }
 
+/* ---- Gallery (tiles in main pane) ---- */
+
+.gallery-view { max-width: 960px; }
+.gallery-view[hidden] { display: none; }
+
+.gallery-title {
+  font-size: 18px;
+  margin: 4px 0 18px 0;
+  letter-spacing: -0.01em;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.gallery-tile {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--glass-shadow-sm);
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.gallery-tile:hover {
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-shadow);
+  transform: translateY(-2px);
+}
+
+.tile-title {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.tile-owner {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-top: 2px;
+}
+
+.tile-badges {
+  margin-top: 8px;
+}
+
+.tile-points {
+  margin: 10px 0 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.tile-empty {
+  margin-top: 10px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--color-muted);
+}
+
+.tile-text {
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.tile-linked {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+}
+
 /* ---- On-screen report view ---- */
 
 .report-view {
