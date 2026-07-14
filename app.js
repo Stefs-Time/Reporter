@@ -66,6 +66,11 @@
     return state.data.projects.find(function (p) { return p.id === id; });
   }
 
+  function projectDisplayName(p) {
+    var name = p.name || "Untitled Project";
+    return p.shortcode ? "[" + p.shortcode + "] " + name : name;
+  }
+
   // ---- Sidebar nav ----
 
   var navButtons = document.querySelectorAll(".nav-btn");
@@ -121,7 +126,7 @@
           '<div class="li-owner"></div>' +
           '<div class="li-badges">' + badges + "</div>" +
           '<div class="li-updated"></div>';
-        li.querySelector(".li-name").textContent = p.name || "Untitled Project";
+        li.querySelector(".li-name").textContent = projectDisplayName(p);
         li.querySelector(".li-owner").textContent = p.owner || "Unassigned";
         li.querySelector(".li-updated").textContent = p.updatedAt ? "Updated " + formatDate(p.updatedAt) : "";
         li.addEventListener("click", function () { selectItem(p.id); });
@@ -177,6 +182,7 @@
     id: document.getElementById("projectId"),
     owner: document.getElementById("ownerInput"),
     name: document.getElementById("nameInput"),
+    shortcode: document.getElementById("shortcodeInput"),
     detail: document.getElementById("detailInput"),
     flagHighlight: document.getElementById("flagHighlightInput"),
     flagRisk: document.getElementById("flagRiskInput"),
@@ -221,6 +227,7 @@
       projectFields.id.value = project.id;
       projectFields.owner.value = project.owner || "";
       projectFields.name.value = project.name || "";
+      projectFields.shortcode.value = project.shortcode || "";
       projectFields.detail.value = project.detail || "";
       projectFields.flagHighlight.checked = !!project.flagHighlight;
       projectFields.flagRisk.checked = !!project.flagRisk;
@@ -249,7 +256,7 @@
       .forEach(function (p) {
         var opt = document.createElement("option");
         opt.value = p.id;
-        opt.textContent = p.name || "Untitled Project";
+        opt.textContent = projectDisplayName(p);
         itemFields.projectLink.appendChild(opt);
       });
     itemFields.projectLink.value = current;
@@ -268,6 +275,7 @@
         id: uid(),
         owner: "",
         name: "",
+        shortcode: "",
         detail: "",
         flagHighlight: false,
         flagRisk: false,
@@ -295,6 +303,7 @@
 
     project.owner = projectFields.owner.value.trim();
     project.name = projectFields.name.value.trim();
+    project.shortcode = projectFields.shortcode.value.trim();
     project.detail = projectFields.detail.value.trim();
     project.flagHighlight = projectFields.flagHighlight.checked;
     project.flagRisk = projectFields.flagRisk.checked;
@@ -419,11 +428,11 @@
     if (entry.type === "project") {
       var p = entry.data;
       var caption = p.detail ? " — " + escapeHtml(p.detail) : "";
-      return "<li><strong>" + escapeHtml(p.name || "Untitled Project") + "</strong>" + caption + "</li>";
+      return "<li><strong>" + escapeHtml(projectDisplayName(p)) + "</strong>" + caption + "</li>";
     }
     var item = entry.data;
     var linked = item.projectId ? findProject(item.projectId) : null;
-    var linkedHtml = linked ? " <em>— Project: " + escapeHtml(linked.name) + "</em>" : "";
+    var linkedHtml = linked ? " <em>— Project: " + escapeHtml(projectDisplayName(linked)) + "</em>" : "";
     return "<li>" + escapeHtml(item.text) + linkedHtml + "</li>";
   }
 
@@ -480,11 +489,11 @@
   function entryPlainText(entry) {
     if (entry.type === "project") {
       var p = entry.data;
-      return "- " + (p.name || "Untitled Project") + (p.detail ? ": " + p.detail : "");
+      return "- " + projectDisplayName(p) + (p.detail ? ": " + p.detail : "");
     }
     var item = entry.data;
     var linked = item.projectId ? findProject(item.projectId) : null;
-    return "- " + item.text + (linked ? " (Project: " + linked.name + ")" : "");
+    return "- " + item.text + (linked ? " (Project: " + projectDisplayName(linked) + ")" : "");
   }
 
   function categoryGroupPlainText(catGroup) {
@@ -632,12 +641,14 @@
   // ---- AI rewrite ----
 
   function buildRewritePrompt(label, contextName, extraContext) {
-    return "You are assisting with a professional Power BI / IT project status report for internal " +
-      'business stakeholders. Rewrite the following "' + label + '" text' +
-      (contextName ? ' for "' + contextName + '"' : "") + " so it reads as clear, concise, " +
-      "professional language suitable for a technical/business status report." +
-      (extraContext ? " " + extraContext : "") + " Do not invent facts, " +
-      "numbers, ticket references, or details that are not present in the source text. Return only " +
+    return "You are assisting with a technical Power BI / IT project status report used as meeting " +
+      'minutes: entries are talking points to be discussed live, so rewrite the following "' + label +
+      '" text' + (contextName ? ' for "' + contextName + '"' : "") + " in a precise, technical voice " +
+      "using correct domain terminology (e.g. data model, refresh, pipeline, access, workspace) where " +
+      "it fits the source text, and keep enough concrete detail (what changed, what's blocking, what's " +
+      "next) that the point stands on its own for someone reading it before the meeting." +
+      (extraContext ? " " + extraContext : "") + " Do not invent facts, numbers, ticket references, " +
+      "or details that are not present in the source text, and do not pad it with filler. Return only " +
       "the rewritten text, with no preamble, commentary, or quotation marks, and no bullet characters.";
   }
 
