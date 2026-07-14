@@ -11,8 +11,8 @@ entirely in your browser on Windows.
 
 Data is saved automatically in the browser's local storage on that PC. Use
 **Export Data** regularly to back up your data to a `.json` file (and
-**Import Data** to restore or move it to another machine). To bulk-load from a
-spreadsheet instead, use **CSV Template** / **Import CSV** (see below).
+**Import Data** to restore or move it to another machine). To move data through a
+spreadsheet instead, use **Export CSV** / **Import CSV** (see below).
 
 ## How it's organised
 
@@ -57,13 +57,16 @@ Report** button in the header for the whole thing — handy for pasting into an
 email, Teams, or Slack. **Print Report** prints the same layout without the
 copy buttons.
 
-## Bulk load from CSV
+## CSV export / import
 
-Click **⬇ CSV Template** to download a ready-to-fill spreadsheet, then
-**⬆ Import CSV** to load it back in. **Importing a CSV replaces all current
+**⬇ Export CSV** is context-aware: if the app is empty it downloads a
+ready-to-fill **template** with example rows; if you already have data it
+downloads a **full dump** of everything currently in the app. Either file is in
+the same format, so a dump can be edited in Excel and re-imported. Then use
+**⬆ Import CSV** to load a file back in. **Importing a CSV replaces all current
 data** (export a JSON backup first if you want to keep it).
 
-The template is one unified sheet with a **Type** column:
+The CSV is one unified sheet with a **Type** column:
 
 - Rows with `Type = Project` fill in Owner, Project Name, Shortcode, the
   Detail / Description (put multiple highlight points in one cell separated by

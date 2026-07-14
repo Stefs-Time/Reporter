@@ -745,14 +745,22 @@
     "Highlight", "At Risk", "On Hold", "Linked Project Shortcode"
   ];
 
+  var SECTION_CSV_TYPE = {
+    risks: "Risk", onHold: "On Hold", itRequests: "IT Support", powerBi: "Power BI"
+  };
+
   function csvEscape(v) {
     v = v == null ? "" : String(v);
     if (/[",\n\r]/.test(v)) return '"' + v.replace(/"/g, '""') + '"';
     return v;
   }
 
-  function csvTemplateContent() {
-    var rows = [
+  function rowsToCsv(rows) {
+    return rows.map(function (r) { return r.map(csvEscape).join(","); }).join("\r\n") + "\r\n";
+  }
+
+  function csvTemplateRows() {
+    return [
       CSV_HEADERS,
       ["Project", "Stefan Botha", "Sales Dashboard Revamp", "SDR", "Executive sign-off received. | DAX build underway.", "Yes", "No", "No", ""],
       ["Project", "Amy Chen", "Inventory Forecast Model", "IFM", "Model accuracy validated against Q2 actuals.", "No", "Yes", "No", ""],
@@ -762,19 +770,51 @@
       ["IT Support", "", "", "", "VPN access request for contractor - INC0045821.", "", "", "", "SDR"],
       ["Power BI", "", "", "", "Workspace licence request - HD-1123.", "", "", "", ""]
     ];
-    return rows.map(function (r) { return r.map(csvEscape).join(","); }).join("\r\n") + "\r\n";
   }
 
-  function downloadCsvTemplate() {
-    var blob = new Blob([csvTemplateContent()], { type: "text/csv" });
+  function dataToCsvRows() {
+    var rows = [CSV_HEADERS];
+    state.data.projects.forEach(function (p) {
+      rows.push([
+        "Project", p.owner || "", p.name || "", p.shortcode || "",
+        linesToArray(p.detail).join(" | "),
+        p.flagHighlight ? "Yes" : "No",
+        p.flagRisk ? "Yes" : "No",
+        p.flagOnHold ? "Yes" : "No",
+        ""
+      ]);
+    });
+    ["risks", "onHold", "itRequests", "powerBi"].forEach(function (section) {
+      state.data[section].forEach(function (item) {
+        var linked = item.projectId ? findProject(item.projectId) : null;
+        rows.push([
+          SECTION_CSV_TYPE[section], "", "", "", item.text || "",
+          "", "", "", linked ? (linked.shortcode || "") : ""
+        ]);
+      });
+    });
+    return rows;
+  }
+
+  function downloadCsv(content, filename) {
+    var blob = new Blob([content], { type: "text/csv" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
-    a.download = "project-feedback-tracker-template.csv";
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  function exportCsv() {
+    if (hasAnyData()) {
+      downloadCsv(rowsToCsv(dataToCsvRows()),
+        "project-feedback-tracker-export-" + new Date().toISOString().slice(0, 10) + ".csv");
+    } else {
+      downloadCsv(rowsToCsv(csvTemplateRows()), "project-feedback-tracker-template.csv");
+    }
   }
 
   function parseCsv(text) {
@@ -1286,7 +1326,7 @@
     if (!btn) return;
     handleCopyCategoryBlock(btn.getAttribute("data-category"), btn);
   });
-  document.getElementById("btnCsvTemplate").addEventListener("click", downloadCsvTemplate);
+  document.getElementById("btnExportCsv").addEventListener("click", exportCsv);
   document.getElementById("importCsvFile").addEventListener("change", function (e) {
     var file = e.target.files[0];
     if (file) importCsv(file);
