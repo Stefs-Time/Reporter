@@ -73,6 +73,9 @@
   var itemListEl = document.getElementById("itemList");
   var btnNewItem = document.getElementById("btnNewItem");
 
+  var sidebarListSectionEl = document.getElementById("sidebarListSection");
+  var reportViewEl = document.getElementById("reportView");
+
   function setActiveSection(section) {
     state.activeSection = section;
     state.selectedId = null;
@@ -80,8 +83,15 @@
       btn.classList.toggle("active", btn.getAttribute("data-section") === section);
     });
     searchBoxEl.value = "";
-    btnNewItem.textContent = section === "projects" ? "+ New Project" : "+ New " + ITEM_SECTIONS[section].label;
-    renderList();
+
+    if (section === "report") {
+      sidebarListSectionEl.hidden = true;
+      renderReportView();
+    } else {
+      sidebarListSectionEl.hidden = false;
+      btnNewItem.textContent = section === "projects" ? "+ New Project" : "+ New " + ITEM_SECTIONS[section].label;
+      renderList();
+    }
     showSelected();
   }
 
@@ -183,6 +193,15 @@
 
   function showSelected() {
     var id = state.selectedId;
+
+    if (state.activeSection === "report") {
+      projectFormEl.hidden = true;
+      itemFormEl.hidden = true;
+      emptyStateEl.hidden = true;
+      reportViewEl.hidden = false;
+      return;
+    }
+    reportViewEl.hidden = true;
 
     if (!id) {
       projectFormEl.hidden = true;
@@ -330,63 +349,198 @@
     showSelected();
   }
 
-  // ---- Print report ----
+  // ---- Report: grouped by owner ----
 
   var printAreaEl = document.getElementById("printArea");
 
-  function renderProjectEntry(p) {
-    var caption = p.detail ? " — " + escapeHtml(p.detail) : "";
-    return "<li><strong>" + escapeHtml(p.name || "Untitled Project") + "</strong> (" +
-      escapeHtml(p.owner || "Unassigned") + ")" + caption + "</li>";
+  var CATEGORY_META = [
+    { key: "highlights", heading: "Key Highlights" },
+    { key: "inProgress", heading: "In Progress" },
+    { key: "risks", heading: "Risks" },
+    { key: "onHold", heading: "On Hold" },
+    { key: "itRequests", heading: ITEM_SECTIONS.itRequests.printHeading },
+    { key: "powerBi", heading: ITEM_SECTIONS.powerBi.printHeading }
+  ];
+
+  function ownerKeyFor(name) {
+    return (name || "").trim() || "Unassigned";
   }
 
-  function renderStandaloneEntry(item) {
+  function emptyOwnerSections() {
+    return { highlights: [], inProgress: [], risks: [], onHold: [], itRequests: [], powerBi: [] };
+  }
+
+  function buildOwnerGroups() {
+    var groups = {};
+    function getGroup(owner) {
+      if (!groups[owner]) groups[owner] = emptyOwnerSections();
+      return groups[owner];
+    }
+
+    state.data.projects.forEach(function (p) {
+      var g = getGroup(ownerKeyFor(p.owner));
+      if (p.flagHighlight) g.highlights.push({ type: "project", data: p });
+      if (!p.flagRisk && !p.flagOnHold) g.inProgress.push({ type: "project", data: p });
+      if (p.flagRisk) g.risks.push({ type: "project", data: p });
+      if (p.flagOnHold) g.onHold.push({ type: "project", data: p });
+    });
+
+    function addItems(list, key) {
+      list.forEach(function (item) {
+        var owner = "Unassigned";
+        if (item.projectId) {
+          var proj = findProject(item.projectId);
+          if (proj) owner = ownerKeyFor(proj.owner);
+        }
+        getGroup(owner)[key].push({ type: "item", data: item });
+      });
+    }
+    addItems(state.data.risks, "risks");
+    addItems(state.data.onHold, "onHold");
+    addItems(state.data.itRequests, "itRequests");
+    addItems(state.data.powerBi, "powerBi");
+
+    var ownerNames = Object.keys(groups).filter(function (o) { return o !== "Unassigned"; }).sort();
+    if (groups.Unassigned) ownerNames.push("Unassigned");
+    return ownerNames.map(function (owner) { return { owner: owner, sections: groups[owner] }; });
+  }
+
+  function renderEntryHtml(entry) {
+    if (entry.type === "project") {
+      var p = entry.data;
+      var caption = p.detail ? " — " + escapeHtml(p.detail) : "";
+      return "<li><strong>" + escapeHtml(p.name || "Untitled Project") + "</strong>" + caption + "</li>";
+    }
+    var item = entry.data;
     var linked = item.projectId ? findProject(item.projectId) : null;
-    var linkedHtml = linked ? " <em>— Related project: " + escapeHtml(linked.name) + "</em>" : "";
+    var linkedHtml = linked ? " <em>— Project: " + escapeHtml(linked.name) + "</em>" : "";
     return "<li>" + escapeHtml(item.text) + linkedHtml + "</li>";
   }
 
-  function renderPrintSection(heading, htmlItems) {
-    var body = htmlItems.length
-      ? "<ul>" + htmlItems.join("") + "</ul>"
-      : '<div class="none">None reported</div>';
-    return '<div class="print-section"><h3>' + escapeHtml(heading) + "</h3>" + body + "</div>";
-  }
+  function renderOwnerGroupHtml(group, includeCopyButton) {
+    var sectionsHtml = CATEGORY_META.map(function (meta) {
+      var entries = group.sections[meta.key];
+      if (!entries.length) return "";
+      var body = "<ul>" + entries.map(renderEntryHtml).join("") + "</ul>";
+      return '<div class="print-section"><h3>' + escapeHtml(meta.heading) + "</h3>" + body + "</div>";
+    }).join("");
 
-  function buildReportHtml() {
-    var projects = state.data.projects;
-
-    var highlights = projects.filter(function (p) { return p.flagHighlight; }).map(renderProjectEntry);
-    var inProgress = projects.filter(function (p) { return !p.flagRisk && !p.flagOnHold; }).map(renderProjectEntry);
-    var risks = projects.filter(function (p) { return p.flagRisk; }).map(renderProjectEntry)
-      .concat(state.data.risks.map(renderStandaloneEntry));
-    var onHold = projects.filter(function (p) { return p.flagOnHold; }).map(renderProjectEntry)
-      .concat(state.data.onHold.map(renderStandaloneEntry));
-    var itRequests = state.data.itRequests.map(renderStandaloneEntry);
-    var powerBi = state.data.powerBi.map(renderStandaloneEntry);
+    var copyBtnHtml = includeCopyButton
+      ? '<button type="button" class="btn copy-owner-btn" data-owner="' + escapeHtml(group.owner) + '">📋 Copy</button>'
+      : "";
 
     return (
-      '<h1 style="font-size:20px;margin-bottom:16px;">Project Feedback Report - ' + new Date().toLocaleDateString() + "</h1>" +
-      '<div class="print-card">' +
-      renderPrintSection("Key Highlights", highlights) +
-      renderPrintSection("In Progress", inProgress) +
-      renderPrintSection("Risks", risks) +
-      renderPrintSection("On Hold", onHold) +
-      renderPrintSection(ITEM_SECTIONS.itRequests.printHeading, itRequests) +
-      renderPrintSection(ITEM_SECTIONS.powerBi.printHeading, powerBi) +
+      '<div class="print-card owner-block">' +
+      '<div class="owner-block-header"><h2>' + escapeHtml(group.owner) + "</h2>" + copyBtnHtml + "</div>" +
+      (sectionsHtml || '<div class="none">Nothing to report for this owner.</div>') +
       "</div>"
     );
   }
 
+  function buildReportHtml(includeCopyButtons) {
+    var groups = buildOwnerGroups();
+    var heading = '<h1 style="font-size:20px;margin-bottom:16px;">Project Feedback Report - ' +
+      new Date().toLocaleDateString() + "</h1>";
+    if (groups.length === 0) {
+      return heading + '<p class="none">There is nothing to report yet.</p>';
+    }
+    return heading + groups.map(function (g) { return renderOwnerGroupHtml(g, includeCopyButtons); }).join("");
+  }
+
+  function renderReportView() {
+    reportViewEl.innerHTML = buildReportHtml(true);
+  }
+
+  function hasAnyData() {
+    return state.data.projects.length > 0 || state.data.risks.length > 0 ||
+      state.data.onHold.length > 0 || state.data.itRequests.length > 0 || state.data.powerBi.length > 0;
+  }
+
   function printReport() {
-    if (state.data.projects.length === 0 &&
-        state.data.risks.length === 0 && state.data.onHold.length === 0 &&
-        state.data.itRequests.length === 0 && state.data.powerBi.length === 0) {
+    if (!hasAnyData()) {
       alert("There is nothing to report yet.");
       return;
     }
-    printAreaEl.innerHTML = buildReportHtml();
+    printAreaEl.innerHTML = buildReportHtml(false);
     window.print();
+  }
+
+  // ---- Report: plain text for copying ----
+
+  function ownerGroupPlainText(group) {
+    var lines = [group.owner.toUpperCase(), "=".repeat(group.owner.length)];
+    CATEGORY_META.forEach(function (meta) {
+      var entries = group.sections[meta.key];
+      if (!entries.length) return;
+      lines.push("");
+      lines.push(meta.heading.toUpperCase());
+      entries.forEach(function (entry) {
+        if (entry.type === "project") {
+          var p = entry.data;
+          lines.push("- " + (p.name || "Untitled Project") + (p.detail ? ": " + p.detail : ""));
+        } else {
+          var item = entry.data;
+          var linked = item.projectId ? findProject(item.projectId) : null;
+          lines.push("- " + item.text + (linked ? " (Project: " + linked.name + ")" : ""));
+        }
+      });
+    });
+    return lines.join("\n");
+  }
+
+  function fullReportPlainText() {
+    var groups = buildOwnerGroups();
+    var header = "Project Feedback Report - " + new Date().toLocaleDateString();
+    if (groups.length === 0) return header + "\n\nThere is nothing to report yet.";
+    return header + "\n\n" + groups.map(ownerGroupPlainText).join("\n\n");
+  }
+
+  function copyTextToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      var ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch (e) {
+        ok = false;
+      }
+      document.body.removeChild(textarea);
+      if (ok) resolve(); else reject(new Error("Copy command was blocked by the browser"));
+    });
+  }
+
+  function flashCopyFeedback(button) {
+    var original = button.textContent;
+    button.textContent = "Copied!";
+    setTimeout(function () { button.textContent = original; }, 1500);
+  }
+
+  function handleCopyFullReport(button) {
+    if (!hasAnyData()) {
+      alert("There is nothing to report yet.");
+      return;
+    }
+    copyTextToClipboard(fullReportPlainText())
+      .then(function () { flashCopyFeedback(button); })
+      .catch(function (err) { alert("Copy failed: " + err.message); });
+  }
+
+  function handleCopyOwnerBlock(ownerName, button) {
+    var groups = buildOwnerGroups();
+    var group = groups.find(function (g) { return g.owner === ownerName; });
+    if (!group) return;
+    copyTextToClipboard(ownerGroupPlainText(group))
+      .then(function () { flashCopyFeedback(button); })
+      .catch(function (err) { alert("Copy failed: " + err.message); });
   }
 
   // ---- Export / Import ----
@@ -492,6 +646,15 @@
           { role: "user", content: userText }
         ]
       })
+    }).catch(function (err) {
+      if (err instanceof TypeError) {
+        throw new Error(
+          "Could not reach the Groq API (\"" + err.message + "\"). This usually means: no internet " +
+          "connection, a firewall/proxy blocking api.groq.com, or your browser blocking network " +
+          "requests from a local file. Try opening this page in Chrome or Edge, and check your connection."
+        );
+      }
+      throw err;
     }).then(function (res) {
       if (!res.ok) {
         return res.text().then(function (text) {
@@ -561,6 +724,14 @@
   searchBoxEl.addEventListener("input", renderList);
 
   document.getElementById("btnPrintReport").addEventListener("click", printReport);
+  document.getElementById("btnCopyReport").addEventListener("click", function (e) {
+    handleCopyFullReport(e.currentTarget);
+  });
+  reportViewEl.addEventListener("click", function (e) {
+    var btn = e.target.closest(".copy-owner-btn");
+    if (!btn) return;
+    handleCopyOwnerBlock(btn.getAttribute("data-owner"), btn);
+  });
   document.getElementById("btnExport").addEventListener("click", exportData);
   document.getElementById("importFile").addEventListener("change", function (e) {
     var file = e.target.files[0];

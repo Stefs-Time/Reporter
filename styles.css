@@ -353,6 +353,28 @@ body {
   page-break-after: always;
 }
 
+/* On-screen report view */
+.report-view {
+  max-width: 760px;
+}
+
+.owner-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.owner-block-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.copy-owner-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
 /* Settings modal */
 .modal-overlay {
   position: fixed;
