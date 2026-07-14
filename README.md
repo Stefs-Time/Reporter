@@ -22,7 +22,9 @@ The sidebar has five sections:
   - Project Name
   - Shortcode (optional short code like `SDR`, shown as a `[SDR]` prefix everywhere
     the project name appears — lists, the report, and the project-link dropdown)
-  - Latest Feedback / Status Caption (short one-liner on where things stand)
+  - Latest Feedback / Status Caption — one line for a short status, or multiple
+    lines to break it into separate highlight points (each line renders as its
+    own bullet under the project on the report)
   - Three flags: **Feature in Key Highlights**, **Flag as At Risk**, **Flag as On Hold**
 
 - **Risks**, **On Hold**, **IT Support Requests**, **Power BI Help Desk** — standalone
@@ -61,12 +63,16 @@ on any standalone item, each have a **✨ Rewrite** button that sends the
 current text to the free [Groq](https://console.groq.com) API and replaces it
 with a reworded version. Project Name gets a lighter touch — tidied wording,
 casing, and grammar only, without changing the subject or inventing a
-different name. Everything else is reworded in a precise, technical voice,
-detailed enough that the point stands on its own as a meeting-minutes-style
-talking point. In every case it only rewrites what's there — it's instructed
-to use only the facts, numbers, and details already present in the source
-text, and to keep things equally vague rather than invent specifics when the
-source is vague.
+different name. Everything else is reworded in a semi-humanized but still
+corporate voice (like a colleague talking, not a press release), detailed
+enough that the point stands on its own as a meeting-minutes-style talking
+point — and if the caption has multiple lines, each line is treated as its
+own point and rewritten one-for-one. It's also told never to repeat the
+project/owner name inside the rewritten text, since that's already shown as
+the heading. In every case it only rewrites what's there — it's instructed to
+use only the facts, numbers, and details already present in the source text,
+and to keep things equally vague rather than invent specifics when the source
+is vague.
 
 There's also an **✨ AI Enhance All** button (top header) that runs the same
 rewrite over every non-empty project name, caption, and standalone item in one

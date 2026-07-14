@@ -71,6 +71,13 @@
     return p.shortcode ? "[" + p.shortcode + "] " + name : name;
   }
 
+  function linesToArray(text) {
+    return (text || "")
+      .split("\n")
+      .map(function (l) { return l.trim(); })
+      .filter(function (l) { return l.length > 0; });
+  }
+
   // ---- Sidebar nav ----
 
   var navButtons = document.querySelectorAll(".nav-btn");
@@ -427,8 +434,12 @@
   function renderEntryHtml(entry) {
     if (entry.type === "project") {
       var p = entry.data;
-      var caption = p.detail ? " — " + escapeHtml(p.detail) : "";
-      return "<li><strong>" + escapeHtml(projectDisplayName(p)) + "</strong>" + caption + "</li>";
+      var heading = "<strong>" + escapeHtml(projectDisplayName(p)) + "</strong>";
+      var points = linesToArray(p.detail);
+      if (points.length === 0) return "<li>" + heading + "</li>";
+      if (points.length === 1) return "<li>" + heading + " — " + escapeHtml(points[0]) + "</li>";
+      var nested = "<ul>" + points.map(function (pt) { return "<li>" + escapeHtml(pt) + "</li>"; }).join("") + "</ul>";
+      return "<li>" + heading + nested + "</li>";
     }
     var item = entry.data;
     var linked = item.projectId ? findProject(item.projectId) : null;
@@ -489,7 +500,12 @@
   function entryPlainText(entry) {
     if (entry.type === "project") {
       var p = entry.data;
-      return "- " + projectDisplayName(p) + (p.detail ? ": " + p.detail : "");
+      var points = linesToArray(p.detail);
+      if (points.length <= 1) {
+        return "- " + projectDisplayName(p) + (points.length ? ": " + points[0] : "");
+      }
+      return "- " + projectDisplayName(p) + "\n" +
+        points.map(function (pt) { return "  - " + pt; }).join("\n");
     }
     var item = entry.data;
     var linked = item.projectId ? findProject(item.projectId) : null;
@@ -646,16 +662,42 @@
     "If the source is vague or incomplete, keep the rewrite equally vague rather than filling gaps " +
     "with plausible-sounding detail. When in doubt, prefer under-stating over guessing.";
 
-  function buildRewritePrompt(label, contextName, extraContext) {
-    return "You are assisting with a technical Power BI / IT project status report used as meeting " +
+  var VOICE_RULE =
+    "Write in a semi-humanized but still corporate voice — like a capable colleague giving a status " +
+    "update out loud, not a press release or robotic corporate-speak. Avoid stiff filler phrases " +
+    "(e.g. \"in order to\", \"it is important to note\", \"moving forward\") and avoid buzzword-stuffing, " +
+    "but keep it professional and fit for a business audience.";
+
+  function buildRewritePrompt(label, contextName, extraContext, isList) {
+    var parts = [];
+    parts.push(
+      "You are assisting with a technical Power BI / IT project status report used as meeting " +
       'minutes: entries are talking points to be discussed live, so rewrite the following "' + label +
-      '" text' + (contextName ? ' for "' + contextName + '"' : "") + " in a precise, technical voice " +
-      "using correct domain terminology (e.g. data model, refresh, pipeline, access, workspace) where " +
-      "it fits the source text, and keep enough concrete detail (what changed, what's blocking, what's " +
-      "next) that the point stands on its own for someone reading it before the meeting." +
-      (extraContext ? " " + extraContext : "") + " " + NO_INVENTING_RULE + " Do not pad it with " +
-      "filler. Return only the rewritten text, with no preamble, commentary, or quotation marks, and " +
-      "no bullet characters.";
+      '" text' + (contextName ? ' for "' + contextName + '"' : "") + "."
+    );
+    parts.push(VOICE_RULE);
+    parts.push(
+      "Use correct domain terminology (e.g. data model, refresh, pipeline, access, workspace) where it " +
+      "fits the source text, and keep enough concrete detail (what changed, what's blocking, what's " +
+      "next) that each point stands on its own for someone reading it before the meeting."
+    );
+    if (contextName) {
+      parts.push(
+        'Do not restate "' + contextName + '" or any other project/owner name inside your rewritten ' +
+        "text — it is already shown separately as a heading, so just describe the update itself."
+      );
+    }
+    if (extraContext) parts.push(extraContext);
+    if (isList) {
+      parts.push(
+        "The input may contain multiple points separated by line breaks; treat each line as a " +
+        "separate point and return the same number of points, one per line."
+      );
+    }
+    parts.push(NO_INVENTING_RULE);
+    parts.push("Do not pad it with filler, and do not add bullet characters or numbering.");
+    parts.push("Return only the rewritten text, with no preamble, commentary, or quotation marks.");
+    return parts.join(" ");
   }
 
   function buildTitleRewritePrompt(contextOwner) {
@@ -753,7 +795,8 @@
     var systemPrompt = buildRewritePrompt(
       "Latest Feedback / Status Caption",
       projectFields.name.value.trim(),
-      project ? projectFlagContext(project) : ""
+      project ? projectFlagContext(project) : "",
+      true
     );
     runRewriteWithPrompt(button, systemPrompt, projectFields.detail);
   }
@@ -788,7 +831,7 @@
           getText: function () { return p.detail; },
           setText: function (v) { p.detail = v; p.updatedAt = nowIso(); },
           buildPrompt: function () {
-            return buildRewritePrompt("Latest Feedback / Status Caption", p.name || "", projectFlagContext(p));
+            return buildRewritePrompt("Latest Feedback / Status Caption", p.name || "", projectFlagContext(p), true);
           }
         });
       }
