@@ -405,6 +405,16 @@
     return ownerNames.map(function (owner) { return { owner: owner, sections: groups[owner] }; });
   }
 
+  function buildCategoryGroups() {
+    var ownerGroups = buildOwnerGroups();
+    return CATEGORY_META.map(function (meta) {
+      var owners = ownerGroups
+        .map(function (og) { return { owner: og.owner, entries: og.sections[meta.key] }; })
+        .filter(function (o) { return o.entries.length > 0; });
+      return { key: meta.key, heading: meta.heading, owners: owners };
+    });
+  }
+
   function renderEntryHtml(entry) {
     if (entry.type === "project") {
       var p = entry.data;
@@ -417,34 +427,34 @@
     return "<li>" + escapeHtml(item.text) + linkedHtml + "</li>";
   }
 
-  function renderOwnerGroupHtml(group, includeCopyButton) {
-    var sectionsHtml = CATEGORY_META.map(function (meta) {
-      var entries = group.sections[meta.key];
-      if (!entries.length) return "";
-      var body = "<ul>" + entries.map(renderEntryHtml).join("") + "</ul>";
-      return '<div class="print-section"><h3>' + escapeHtml(meta.heading) + "</h3>" + body + "</div>";
-    }).join("");
+  function renderCategoryBlockHtml(catGroup, includeCopyButton) {
+    var body = catGroup.owners.length
+      ? catGroup.owners.map(function (o) {
+          return '<div class="owner-subgroup"><h4>' + escapeHtml(o.owner) + "</h4><ul>" +
+            o.entries.map(renderEntryHtml).join("") + "</ul></div>";
+        }).join("")
+      : '<div class="none">None reported</div>';
 
     var copyBtnHtml = includeCopyButton
-      ? '<button type="button" class="btn copy-owner-btn" data-owner="' + escapeHtml(group.owner) + '">📋 Copy</button>'
+      ? '<button type="button" class="btn copy-category-btn" data-category="' + escapeHtml(catGroup.key) + '">📋 Copy</button>'
       : "";
 
     return (
-      '<div class="print-card owner-block">' +
-      '<div class="owner-block-header"><h2>' + escapeHtml(group.owner) + "</h2>" + copyBtnHtml + "</div>" +
-      (sectionsHtml || '<div class="none">Nothing to report for this owner.</div>') +
+      '<div class="print-card category-block">' +
+      '<div class="category-block-header"><h2>' + escapeHtml(catGroup.heading) + "</h2>" + copyBtnHtml + "</div>" +
+      body +
       "</div>"
     );
   }
 
   function buildReportHtml(includeCopyButtons) {
-    var groups = buildOwnerGroups();
+    var groups = buildCategoryGroups();
     var heading = '<h1 style="font-size:20px;margin-bottom:16px;">Project Feedback Report - ' +
       new Date().toLocaleDateString() + "</h1>";
-    if (groups.length === 0) {
+    if (!hasAnyData()) {
       return heading + '<p class="none">There is nothing to report yet.</p>';
     }
-    return heading + groups.map(function (g) { return renderOwnerGroupHtml(g, includeCopyButtons); }).join("");
+    return heading + groups.map(function (g) { return renderCategoryBlockHtml(g, includeCopyButtons); }).join("");
   }
 
   function renderReportView() {
@@ -467,32 +477,31 @@
 
   // ---- Report: plain text for copying ----
 
-  function ownerGroupPlainText(group) {
-    var lines = [group.owner.toUpperCase(), "=".repeat(group.owner.length)];
-    CATEGORY_META.forEach(function (meta) {
-      var entries = group.sections[meta.key];
-      if (!entries.length) return;
+  function entryPlainText(entry) {
+    if (entry.type === "project") {
+      var p = entry.data;
+      return "- " + (p.name || "Untitled Project") + (p.detail ? ": " + p.detail : "");
+    }
+    var item = entry.data;
+    var linked = item.projectId ? findProject(item.projectId) : null;
+    return "- " + item.text + (linked ? " (Project: " + linked.name + ")" : "");
+  }
+
+  function categoryGroupPlainText(catGroup) {
+    var lines = [catGroup.heading.toUpperCase(), "=".repeat(catGroup.heading.length)];
+    catGroup.owners.forEach(function (o) {
       lines.push("");
-      lines.push(meta.heading.toUpperCase());
-      entries.forEach(function (entry) {
-        if (entry.type === "project") {
-          var p = entry.data;
-          lines.push("- " + (p.name || "Untitled Project") + (p.detail ? ": " + p.detail : ""));
-        } else {
-          var item = entry.data;
-          var linked = item.projectId ? findProject(item.projectId) : null;
-          lines.push("- " + item.text + (linked ? " (Project: " + linked.name + ")" : ""));
-        }
-      });
+      lines.push(o.owner);
+      o.entries.forEach(function (entry) { lines.push(entryPlainText(entry)); });
     });
     return lines.join("\n");
   }
 
   function fullReportPlainText() {
-    var groups = buildOwnerGroups();
+    var groups = buildCategoryGroups();
     var header = "Project Feedback Report - " + new Date().toLocaleDateString();
-    if (groups.length === 0) return header + "\n\nThere is nothing to report yet.";
-    return header + "\n\n" + groups.map(ownerGroupPlainText).join("\n\n");
+    if (!hasAnyData()) return header + "\n\nThere is nothing to report yet.";
+    return header + "\n\n" + groups.map(categoryGroupPlainText).join("\n\n");
   }
 
   function copyTextToClipboard(text) {
@@ -534,11 +543,11 @@
       .catch(function (err) { alert("Copy failed: " + err.message); });
   }
 
-  function handleCopyOwnerBlock(ownerName, button) {
-    var groups = buildOwnerGroups();
-    var group = groups.find(function (g) { return g.owner === ownerName; });
+  function handleCopyCategoryBlock(categoryKey, button) {
+    var groups = buildCategoryGroups();
+    var group = groups.find(function (g) { return g.key === categoryKey; });
     if (!group) return;
-    copyTextToClipboard(ownerGroupPlainText(group))
+    copyTextToClipboard(categoryGroupPlainText(group))
       .then(function () { flashCopyFeedback(button); })
       .catch(function (err) { alert("Copy failed: " + err.message); });
   }
@@ -728,9 +737,9 @@
     handleCopyFullReport(e.currentTarget);
   });
   reportViewEl.addEventListener("click", function (e) {
-    var btn = e.target.closest(".copy-owner-btn");
+    var btn = e.target.closest(".copy-category-btn");
     if (!btn) return;
-    handleCopyOwnerBlock(btn.getAttribute("data-owner"), btn);
+    handleCopyCategoryBlock(btn.getAttribute("data-category"), btn);
   });
   document.getElementById("btnExport").addEventListener("click", exportData);
   document.getElementById("importFile").addEventListener("change", function (e) {

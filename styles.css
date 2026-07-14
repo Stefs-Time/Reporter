@@ -324,26 +324,7 @@ body {
   page-break-inside: avoid;
 }
 
-.print-section {
-  margin-bottom: 10px;
-}
-
-.print-section h3 {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin: 0 0 4px 0;
-  border-bottom: 1px solid #ccc;
-  padding-bottom: 2px;
-}
-
-.print-section ul {
-  margin: 0;
-  padding-left: 18px;
-  font-size: 13px;
-}
-
-.print-section .none {
+.none {
   font-size: 13px;
   color: #777;
   font-style: italic;
@@ -358,21 +339,41 @@ body {
   max-width: 760px;
 }
 
-.owner-block-header {
+.category-block-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
 }
 
-.owner-block-header h2 {
+.category-block-header h2 {
   margin: 0;
   font-size: 18px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 4px;
+  flex: 1;
 }
 
-.copy-owner-btn {
+.copy-category-btn {
   font-size: 12px;
   padding: 4px 10px;
+}
+
+.owner-subgroup {
+  margin-bottom: 10px;
+}
+
+.owner-subgroup h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 2px 0;
+  color: #33383f;
+}
+
+.owner-subgroup ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
 }
 
 /* Settings modal */
