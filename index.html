@@ -16,6 +16,7 @@
     <button id="btnExport" class="btn">Export Data</button>
     <label class="btn" for="importFile">Import Data</label>
     <input type="file" id="importFile" accept="application/json" hidden>
+    <button id="btnSettings" class="btn">AI Settings</button>
   </div>
 </header>
 
@@ -48,37 +49,58 @@
       </div>
 
       <div class="form-field">
-        <label for="detailInput">Latest Feedback / Status Caption</label>
+        <div class="field-label-row">
+          <label for="detailInput">Latest Feedback / Status Caption</label>
+          <button type="button" class="btn-rewrite" data-field="detail">✨ Rewrite</button>
+        </div>
         <textarea id="detailInput" rows="2" placeholder="Short caption on where the project currently stands"></textarea>
       </div>
 
       <div class="form-field">
-        <label for="highlightsInput">Key Highlights</label>
+        <div class="field-label-row">
+          <label for="highlightsInput">Key Highlights</label>
+          <button type="button" class="btn-rewrite" data-field="highlights">✨ Rewrite</button>
+        </div>
         <textarea id="highlightsInput" rows="3" placeholder="One item per line"></textarea>
       </div>
 
       <div class="form-field">
-        <label for="progressInput">In Progress</label>
+        <div class="field-label-row">
+          <label for="progressInput">In Progress</label>
+          <button type="button" class="btn-rewrite" data-field="progress">✨ Rewrite</button>
+        </div>
         <textarea id="progressInput" rows="3" placeholder="One item per line"></textarea>
       </div>
 
       <div class="form-field">
-        <label for="risksInput">Risks</label>
+        <div class="field-label-row">
+          <label for="risksInput">Risks</label>
+          <button type="button" class="btn-rewrite" data-field="risks">✨ Rewrite</button>
+        </div>
         <textarea id="risksInput" rows="3" placeholder="One item per line"></textarea>
       </div>
 
       <div class="form-field">
-        <label for="onHoldInput">On Hold</label>
+        <div class="field-label-row">
+          <label for="onHoldInput">On Hold</label>
+          <button type="button" class="btn-rewrite" data-field="onHold">✨ Rewrite</button>
+        </div>
         <textarea id="onHoldInput" rows="3" placeholder="One item per line"></textarea>
       </div>
 
       <div class="form-field">
-        <label for="itRequestsInput">Support Requests Opened to IT</label>
+        <div class="field-label-row">
+          <label for="itRequestsInput">Support Requests Opened to IT</label>
+          <button type="button" class="btn-rewrite" data-field="itRequests">✨ Rewrite</button>
+        </div>
         <textarea id="itRequestsInput" rows="3" placeholder="One item per line"></textarea>
       </div>
 
       <div class="form-field">
-        <label for="powerBiInput">Open Help Desk Requests with Power BI Department</label>
+        <div class="field-label-row">
+          <label for="powerBiInput">Open Help Desk Requests with Power BI Department</label>
+          <button type="button" class="btn-rewrite" data-field="powerBi">✨ Rewrite</button>
+        </div>
         <textarea id="powerBiInput" rows="3" placeholder="One item per line"></textarea>
       </div>
 
@@ -93,6 +115,33 @@
 </div>
 
 <section id="printArea" class="print-only"></section>
+
+<div id="settingsModal" class="modal-overlay no-print" hidden>
+  <div class="modal">
+    <h2>AI Rewrite Settings</h2>
+    <p class="modal-hint">
+      Uses the free <strong>Groq</strong> API to rewrite feedback text for a technical/business
+      reporting tone. Get a free key at <strong>console.groq.com</strong>. The key is stored only
+      in this browser's local storage on this PC and is sent directly from your browser to Groq.
+    </p>
+    <div class="form-field">
+      <label for="groqApiKeyInput">Groq API Key</label>
+      <input type="password" id="groqApiKeyInput" placeholder="gsk_...">
+    </div>
+    <div class="form-field">
+      <label for="groqModelInput">Model</label>
+      <select id="groqModelInput">
+        <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (best quality)</option>
+        <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (fastest, higher limits)</option>
+        <option value="meta-llama/llama-4-scout-17b-16e-instruct">llama-4-scout-17b (newer architecture)</option>
+      </select>
+    </div>
+    <div class="form-actions">
+      <button type="button" id="btnSaveSettings" class="btn btn-primary">Save</button>
+      <button type="button" id="btnCloseSettings" class="btn">Close</button>
+    </div>
+  </div>
+</div>
 
 <script src="app.js"></script>
 </body>

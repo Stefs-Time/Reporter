@@ -2,6 +2,8 @@
   "use strict";
 
   var STORAGE_KEY = "projectFeedbackTracker.projects";
+  var SETTINGS_KEY = "projectFeedbackTracker.aiSettings";
+  var GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 
   var SECTIONS = [
     { key: "highlights", label: "Key Highlights", inputId: "highlightsInput" },
@@ -11,6 +13,13 @@
     { key: "itRequests", label: "Support Requests Opened to IT", inputId: "itRequestsInput" },
     { key: "powerBi", label: "Open Help Desk Requests - Power BI Department", inputId: "powerBiInput" }
   ];
+
+  var REWRITE_FIELDS = {
+    detail: { label: "Latest Feedback / Status Caption", inputId: "detailInput", isList: false }
+  };
+  SECTIONS.forEach(function (s) {
+    REWRITE_FIELDS[s.key] = { label: s.label, inputId: s.inputId, isList: true };
+  });
 
   var state = {
     projects: [],
@@ -289,6 +298,132 @@
     reader.readAsText(file);
   }
 
+  // ---- AI rewrite settings ----
+
+  var settingsModalEl = document.getElementById("settingsModal");
+  var groqApiKeyInputEl = document.getElementById("groqApiKeyInput");
+  var groqModelInputEl = document.getElementById("groqModelInput");
+
+  function loadAiSettings() {
+    try {
+      var raw = localStorage.getItem(SETTINGS_KEY);
+      return raw ? JSON.parse(raw) : { apiKey: "", model: "llama-3.3-70b-versatile" };
+    } catch (e) {
+      return { apiKey: "", model: "llama-3.3-70b-versatile" };
+    }
+  }
+
+  function saveAiSettings(settings) {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }
+
+  function openSettingsModal() {
+    var settings = loadAiSettings();
+    groqApiKeyInputEl.value = settings.apiKey || "";
+    groqModelInputEl.value = settings.model || "llama-3.3-70b-versatile";
+    settingsModalEl.hidden = false;
+  }
+
+  function closeSettingsModal() {
+    settingsModalEl.hidden = true;
+  }
+
+  function handleSaveSettings() {
+    saveAiSettings({
+      apiKey: groqApiKeyInputEl.value.trim(),
+      model: groqModelInputEl.value
+    });
+    closeSettingsModal();
+  }
+
+  // ---- AI rewrite ----
+
+  function buildRewritePrompt(fieldInfo, ownerName, projectName) {
+    var base =
+      "You are assisting with a professional Power BI / IT project status report for internal " +
+      'business stakeholders. Rewrite the "' + fieldInfo.label + '" content for the project "' +
+      (projectName || "this project") + '" (owner: ' + (ownerName || "unassigned") + ") so it reads " +
+      "as clear, concise, professional language suitable for a technical/business status report. " +
+      "Do not invent facts, numbers, ticket references, or details that are not present in the source text. " +
+      "Do not add any preamble, commentary, or quotation marks around the output.";
+    if (fieldInfo.isList) {
+      base += " The input is a list with one item per line. Return the same number of items, " +
+        "rewritten, one per line, with no bullet characters or numbering.";
+    } else {
+      base += " Return a single rewritten sentence or two.";
+    }
+    return base;
+  }
+
+  function callGroq(apiKey, model, systemPrompt, userText) {
+    return fetch(GROQ_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + apiKey
+      },
+      body: JSON.stringify({
+        model: model,
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userText }
+        ]
+      })
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.text().then(function (text) {
+          throw new Error("Groq API error " + res.status + ": " + text.slice(0, 300));
+        });
+      }
+      return res.json();
+    }).then(function (data) {
+      var content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+      if (!content) throw new Error("Groq API returned no content");
+      return content.trim();
+    });
+  }
+
+  function handleRewriteClick(button) {
+    var fieldKey = button.getAttribute("data-field");
+    var fieldInfo = REWRITE_FIELDS[fieldKey];
+    if (!fieldInfo) return;
+
+    var settings = loadAiSettings();
+    if (!settings.apiKey) {
+      openSettingsModal();
+      return;
+    }
+
+    var textarea = fields[fieldKey];
+    var currentText = fieldInfo.isList
+      ? linesToArray(textarea.value).join("\n")
+      : textarea.value.trim();
+
+    if (!currentText) return;
+
+    var systemPrompt = buildRewritePrompt(fieldInfo, fields.owner.value.trim(), fields.name.value.trim());
+
+    var originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = "Rewriting...";
+    button.classList.remove("error");
+
+    callGroq(settings.apiKey, settings.model, systemPrompt, currentText)
+      .then(function (rewritten) {
+        textarea.value = rewritten;
+        button.textContent = originalLabel;
+        button.disabled = false;
+      })
+      .catch(function (err) {
+        console.error(err);
+        button.textContent = "Failed - retry";
+        button.classList.add("error");
+        button.disabled = false;
+        alert("Rewrite failed: " + err.message);
+      });
+  }
+
   // ---- Wiring ----
 
   document.getElementById("btnNewProject").addEventListener("click", newProject);
@@ -305,6 +440,17 @@
   });
   formEl.addEventListener("submit", handleSave);
   searchBoxEl.addEventListener("input", renderList);
+
+  document.getElementById("btnSettings").addEventListener("click", openSettingsModal);
+  document.getElementById("btnSaveSettings").addEventListener("click", handleSaveSettings);
+  document.getElementById("btnCloseSettings").addEventListener("click", closeSettingsModal);
+  settingsModalEl.addEventListener("click", function (e) {
+    if (e.target === settingsModalEl) closeSettingsModal();
+  });
+
+  document.querySelectorAll(".btn-rewrite").forEach(function (btn) {
+    btn.addEventListener("click", function () { handleRewriteClick(btn); });
+  });
 
   // ---- Init ----
 
