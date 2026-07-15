@@ -425,6 +425,14 @@
     }
   }
 
+  function flashSaved(formEl2) {
+    var btn = formEl2.querySelector('button[type="submit"]');
+    if (!btn) return;
+    var orig = btn.textContent;
+    btn.textContent = "Saved ✓";
+    setTimeout(function () { btn.textContent = orig; }, 1200);
+  }
+
   function handleSaveProject(e) {
     e.preventDefault();
     var project = findProject(projectFields.id.value);
@@ -441,6 +449,7 @@
 
     saveData();
     renderList();
+    flashSaved(projectFormEl);
   }
 
   function handleDeleteProject() {
@@ -473,6 +482,7 @@
 
     saveData();
     renderList();
+    flashSaved(itemFormEl);
   }
 
   function handleDeleteItem() {
@@ -1059,7 +1069,7 @@
       "commentary, or quotation marks.";
   }
 
-  function callGroq(apiKey, model, systemPrompt, userText) {
+  function callGroqMessages(apiKey, model, messages) {
     return fetch(GROQ_ENDPOINT, {
       method: "POST",
       headers: {
@@ -1069,10 +1079,7 @@
       body: JSON.stringify({
         model: model,
         temperature: 0.3,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userText }
-        ]
+        messages: messages
       })
     }).catch(function (err) {
       if (err instanceof TypeError) {
@@ -1095,6 +1102,13 @@
       if (!content) throw new Error("Groq API returned no content");
       return content.trim();
     });
+  }
+
+  function callGroq(apiKey, model, systemPrompt, userText) {
+    return callGroqMessages(apiKey, model, [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userText }
+    ]);
   }
 
   function buildShortcodePrompt() {
@@ -1305,6 +1319,239 @@
     runNext();
   }
 
+  // ---- AI update chat ----
+
+  var chatPanelEl = document.getElementById("chatPanel");
+  var chatMessagesEl = document.getElementById("chatMessages");
+  var chatInputEl = document.getElementById("chatInput");
+  var chatHistory = [];
+
+  function chatAppend(role, text) {
+    var div = document.createElement("div");
+    div.className = "chat-msg " + (role === "user" ? "chat-user" : "chat-ai");
+    div.textContent = text;
+    chatMessagesEl.appendChild(div);
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+    return div;
+  }
+
+  function chatStateSnapshot() {
+    return JSON.stringify({
+      projects: state.data.projects.map(function (p) {
+        return {
+          shortcode: p.shortcode || "",
+          name: p.name,
+          owner: p.owner,
+          points: linesToArray(p.detail),
+          flags: { highlight: !!p.flagHighlight, at_risk: !!p.flagRisk, on_hold: !!p.flagOnHold }
+        };
+      }),
+      items: ["risks", "onHold", "itRequests", "powerBi"].reduce(function (acc, section) {
+        acc[section] = state.data[section].map(function (item) {
+          var linked = item.projectId ? findProject(item.projectId) : null;
+          return { text: item.text, linked_shortcode: linked ? (linked.shortcode || "") : "" };
+        });
+        return acc;
+      }, {})
+    });
+  }
+
+  function buildChatSystemPrompt() {
+    return "You are the built-in update assistant for a Power BI / IT project status tracker. " +
+      "Users send quick, informal status updates; you convert them into structured actions that the " +
+      "app applies to its data. Projects are usually referenced by shortcode (e.g. SDR) or by name.\n\n" +
+      "CURRENT TRACKER DATA:\n" + chatStateSnapshot() + "\n\n" +
+      "Respond with ONLY a JSON object — no prose, no code fences — in exactly this shape:\n" +
+      '{"actions":[...],"reply":"one or two sentence confirmation for the user"}\n\n' +
+      "Available actions:\n" +
+      '1. {"action":"update_project","shortcode":"SDR","points":["..."],"flags":{"highlight":true,"at_risk":false,"on_hold":false}}\n' +
+      '   "points" must be the COMPLETE merged list of status points for that project: keep every ' +
+      "existing point that still applies, fold the user's new information in, and drop only points the " +
+      'update clearly supersedes. Omit "points" entirely to leave the caption unchanged. In "flags", ' +
+      "include only flags the user's message clearly changes.\n" +
+      '2. {"action":"add_item","section":"risks","text":"...","link_shortcode":"SDR"} — for a new risk, ' +
+      'on-hold item, IT support request, or Power BI help desk request. "section" is one of "risks", ' +
+      '"onHold", "itRequests", "powerBi". "link_shortcode" is optional.\n' +
+      '3. {"action":"add_project","name":"...","owner":"...","shortcode":"...","points":["..."]} — only ' +
+      "when the user clearly describes a brand-new project.\n\n" +
+      "Rules: " + VOICE_RULE + " Never restate the project name inside a point — it is shown as a " +
+      "heading. " + NO_INVENTING_RULE + " If the message is ambiguous, or you cannot confidently match " +
+      'a project, return an empty actions array and ask one short clarifying question in "reply".';
+  }
+
+  function extractJsonObject(text) {
+    var t = (text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+    var start = t.indexOf("{");
+    var end = t.lastIndexOf("}");
+    if (start === -1 || end <= start) throw new Error("no JSON object found");
+    return JSON.parse(t.slice(start, end + 1));
+  }
+
+  function findProjectByRef(ref) {
+    if (!ref) return null;
+    var str = String(ref).trim();
+    if (/^[A-Za-z0-9]{2,6}$/.test(str)) {
+      var code = str.toUpperCase();
+      var byCode = state.data.projects.find(function (p) { return (p.shortcode || "").toUpperCase() === code; });
+      if (byCode) return byCode;
+    }
+    var lower = str.toLowerCase();
+    return state.data.projects.find(function (p) { return (p.name || "").toLowerCase() === lower; }) ||
+      state.data.projects.find(function (p) { return (p.name || "").toLowerCase().indexOf(lower) !== -1; }) ||
+      null;
+  }
+
+  function normalizeChatSection(s) {
+    var t = String(s || "").toLowerCase().replace(/[^a-z]/g, "");
+    if (t.indexOf("risk") === 0) return "risks";
+    if (t.indexOf("hold") !== -1) return "onHold";
+    if (t.indexOf("it") === 0 || t.indexOf("support") !== -1) return "itRequests";
+    if (t.indexOf("power") !== -1 || t.indexOf("bi") === 0 || t.indexOf("helpdesk") !== -1) return "powerBi";
+    return null;
+  }
+
+  function readFlag(obj, aliases) {
+    for (var i = 0; i < aliases.length; i++) {
+      if (obj && typeof obj[aliases[i]] === "boolean") return obj[aliases[i]];
+    }
+    return undefined;
+  }
+
+  function cleanPoints(points) {
+    return (Array.isArray(points) ? points : [])
+      .map(function (x) { return String(x).trim(); })
+      .filter(Boolean);
+  }
+
+  function applyChatActions(actions) {
+    var summary = [];
+    var changed = false;
+
+    (actions || []).forEach(function (a) {
+      if (!a || typeof a !== "object") return;
+      var act = String(a.action || "").toLowerCase();
+
+      if (act === "update_project") {
+        var p = findProjectByRef(a.shortcode || a.project || a.name);
+        if (!p) {
+          summary.push('No project matches "' + (a.shortcode || a.name || "?") + '" — skipped.');
+          return;
+        }
+        var did = [];
+        var pts = cleanPoints(a.points);
+        if (pts.length) { p.detail = pts.join("\n"); did.push("status points updated"); }
+        var flags = a.flags || a.set_flags || {};
+        [
+          [["highlight", "flagHighlight"], "flagHighlight", "Highlight"],
+          [["at_risk", "atRisk", "risk"], "flagRisk", "At Risk"],
+          [["on_hold", "onHold", "hold"], "flagOnHold", "On Hold"]
+        ].forEach(function (def) {
+          var val = readFlag(flags, def[0]);
+          if (val !== undefined && p[def[1]] !== val) {
+            p[def[1]] = val;
+            did.push(def[2] + (val ? " on" : " off"));
+          }
+        });
+        if (did.length) {
+          p.updatedAt = nowIso();
+          changed = true;
+          summary.push("[" + (p.shortcode || p.name) + "] " + did.join(", "));
+        }
+        return;
+      }
+
+      if (act === "add_item") {
+        var section = normalizeChatSection(a.section);
+        var text = String(a.text || "").trim();
+        if (!section || !text) {
+          summary.push("Couldn't place one item (missing section or text) — skipped.");
+          return;
+        }
+        var linked = findProjectByRef(a.link_shortcode || a.linked_shortcode || a.link);
+        state.data[section].push({
+          id: uid(), text: text, projectId: linked ? linked.id : "",
+          createdAt: nowIso(), updatedAt: nowIso()
+        });
+        changed = true;
+        summary.push("Added " + ITEM_SECTIONS[section].label +
+          (linked ? " linked to [" + (linked.shortcode || linked.name) + "]" : ""));
+        return;
+      }
+
+      if (act === "add_project") {
+        var name = String(a.name || "").trim();
+        if (!name) return;
+        var code = sanitizeShortcode(a.shortcode || "");
+        if (code && state.data.projects.some(function (p2) { return (p2.shortcode || "").toUpperCase() === code; })) {
+          code = "";
+        }
+        var flags2 = a.flags || {};
+        state.data.projects.push({
+          id: uid(),
+          owner: String(a.owner || "").trim(),
+          name: name,
+          shortcode: code,
+          detail: cleanPoints(a.points).join("\n"),
+          flagHighlight: readFlag(flags2, ["highlight", "flagHighlight"]) === true,
+          flagRisk: readFlag(flags2, ["at_risk", "atRisk", "risk"]) === true,
+          flagOnHold: readFlag(flags2, ["on_hold", "onHold", "hold"]) === true,
+          createdAt: nowIso(),
+          updatedAt: nowIso()
+        });
+        changed = true;
+        summary.push("Created project " + (code ? "[" + code + "] " : "") + name);
+      }
+    });
+
+    if (changed) {
+      saveData();
+      renderList();
+      if (state.activeSection === "report") renderReportView();
+      showSelected();
+    }
+    return summary;
+  }
+
+  function handleChatSend() {
+    var settings = loadAiSettings();
+    if (!settings.apiKey) { openSettingsModal(); return; }
+    var text = chatInputEl.value.trim();
+    if (!text) return;
+
+    chatAppend("user", text);
+    chatInputEl.value = "";
+    chatHistory.push({ role: "user", content: text });
+
+    var thinking = chatAppend("ai", "Thinking…");
+    var sendBtn = document.getElementById("btnChatSend");
+    sendBtn.disabled = true;
+
+    var messages = [{ role: "system", content: buildChatSystemPrompt() }].concat(chatHistory.slice(-8));
+
+    callGroqMessages(settings.apiKey, settings.model, messages)
+      .then(function (raw) {
+        var parsed;
+        try {
+          parsed = extractJsonObject(raw);
+        } catch (e) {
+          throw new Error("The AI reply couldn't be understood — try rephrasing your update.");
+        }
+        var summary = applyChatActions(parsed.actions);
+        var reply = String(parsed.reply || "Done.");
+        chatHistory.push({ role: "assistant", content: reply });
+        thinking.remove();
+        chatAppend("ai", reply + (summary.length
+          ? "\n\n" + summary.map(function (s) { return "• " + s; }).join("\n")
+          : ""));
+      })
+      .catch(function (err) {
+        console.error(err);
+        thinking.remove();
+        chatAppend("ai", "⚠️ " + err.message);
+      })
+      .then(function () { sendBtn.disabled = false; });
+  }
+
   // ---- Wiring ----
 
   navButtons.forEach(function (btn) {
@@ -1367,6 +1614,33 @@
   document.getElementById("btnCloseSettings").addEventListener("click", closeSettingsModal);
   settingsModalEl.addEventListener("click", function (e) {
     if (e.target === settingsModalEl) closeSettingsModal();
+  });
+
+  document.getElementById("btnChatToggle").addEventListener("click", function () {
+    chatPanelEl.hidden = !chatPanelEl.hidden;
+    if (!chatPanelEl.hidden) chatInputEl.focus();
+  });
+  document.getElementById("btnChatClose").addEventListener("click", function () {
+    chatPanelEl.hidden = true;
+  });
+  document.getElementById("btnChatSend").addEventListener("click", handleChatSend);
+  chatInputEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleChatSend();
+    }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") {
+      if (!settingsModalEl.hidden) { closeSettingsModal(); return; }
+      if (!chatPanelEl.hidden) { chatPanelEl.hidden = true; }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+      if (!projectFormEl.hidden) { e.preventDefault(); projectFormEl.requestSubmit(); }
+      else if (!itemFormEl.hidden) { e.preventDefault(); itemFormEl.requestSubmit(); }
+    }
   });
 
   // ---- Init ----

@@ -162,6 +162,22 @@
   </div>
 </div>
 
+<button id="btnChatToggle" class="chat-fab no-print" title="AI Update Chat">💬</button>
+
+<div id="chatPanel" class="chat-panel no-print" hidden>
+  <div class="chat-header">
+    <h3>AI Update Chat</h3>
+    <button type="button" id="btnChatClose" class="btn btn-chat-close">✕</button>
+  </div>
+  <div id="chatMessages" class="chat-messages">
+    <div class="chat-msg chat-ai">Tell me what changed and I'll update the tracker — reference projects by shortcode or name. e.g. "SDR: sign-off received, UAT next week. Log a risk on IFM — data feed delayed."</div>
+  </div>
+  <div class="chat-input-row">
+    <textarea id="chatInput" rows="2" placeholder='e.g. "SDR: exec signed off, UAT next week"'></textarea>
+    <button type="button" id="btnChatSend" class="btn btn-primary">Send</button>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

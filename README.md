@@ -108,14 +108,38 @@ confirms first (since it touches everything at once), shows live progress,
 skips blank entries, and keeps going past individual failures, reporting a
 summary at the end.
 
-To set it up:
+## AI update chat
+
+The **💬 button** (bottom right) opens a chat panel where you can type updates
+in plain language and have them applied for you — the fastest way to keep the
+tracker current. Reference projects by shortcode or name, e.g.:
+
+> SDR: exec signed off, UAT next week. Log a risk on IFM — data feed delayed.
+
+The AI sees the tracker's current data, merges your new information into the
+right project's status points (keeping points that still apply, dropping only
+ones your update supersedes), sets flags when you say something is at risk /
+on hold / a highlight, adds standalone risk/on-hold/IT/Power BI items (linked
+to the project you mention), and can create a new project when you describe
+one. Every reply ends with a bullet summary of exactly what it changed, and it
+follows the same "use only what you said, don't invent details" rule as the
+rewrite buttons. If your message is ambiguous it asks a clarifying question
+instead of guessing. Press **Enter** to send (Shift+Enter for a new line).
+
+## Keyboard shortcuts
+
+- **Ctrl+S** (Cmd+S on Mac) — save the project or item form you're editing
+- **Esc** — close the settings modal or the chat panel
+- **Enter** in the chat — send (Shift+Enter for a new line)
+
+## AI setup
 
 1. Create a free account at [console.groq.com](https://console.groq.com) and
    generate an API key (starts with `gsk_`). Groq's free tier needs no credit card.
 2. In the app, click **AI Settings** (top right), paste the key in, pick a model,
    and click **Save**.
-3. Click **✨ Rewrite** next to the field you want reworded, or **✨ AI Enhance
-   All** to rewrite everything at once.
+3. Click **✨ Rewrite** next to the field you want reworded, **✨ AI Enhance
+   All** to rewrite everything at once, or **💬** to chat your updates in.
 
 The key is stored only in this browser's local storage on this PC, and is sent
 directly from your browser to Groq's API — it never passes through any other
