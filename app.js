@@ -1204,6 +1204,54 @@
       function (v) { itemFields.text.value = v; });
   }
 
+  // ---- AI undo (one level, survives reload) ----
+
+  var UNDO_KEY = "projectFeedbackTracker.undoSnapshot";
+  var btnUndoAi = document.getElementById("btnUndoAi");
+
+  function getUndoSnapshot() {
+    try {
+      var raw = localStorage.getItem(UNDO_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function updateUndoButton() {
+    var snap = getUndoSnapshot();
+    btnUndoAi.hidden = !snap;
+    if (snap) btnUndoAi.title = "Restore data to before: " + snap.label + " (" + formatDate(snap.ts) + ")";
+  }
+
+  function setUndoSnapshot(label, snapshotData) {
+    try {
+      localStorage.setItem(UNDO_KEY, JSON.stringify({ label: label, ts: nowIso(), data: snapshotData }));
+    } catch (e) {
+      console.error("Could not store undo snapshot", e);
+    }
+    updateUndoButton();
+  }
+
+  function clearUndoSnapshot() {
+    localStorage.removeItem(UNDO_KEY);
+    updateUndoButton();
+  }
+
+  function undoLastAi() {
+    var snap = getUndoSnapshot();
+    if (!snap) return;
+    if (!confirm('Undo "' + snap.label + '" from ' + formatDate(snap.ts) +
+      "? All changes made since then — including manual edits — will be reverted.")) return;
+    state.data = Object.assign(emptyData(), snap.data);
+    state.selectedId = null;
+    saveData();
+    clearUndoSnapshot();
+    renderList();
+    if (state.activeSection === "report") renderReportView();
+    showSelected();
+  }
+
   // ---- AI enhance all ----
 
   function collectEnhanceTasks() {
@@ -1270,11 +1318,13 @@
     }
     if (!confirm(
       "This will send " + tasks.length + " entr" + (tasks.length === 1 ? "y" : "ies") +
-      " to Groq and replace each with an AI-reworded version. This cannot be undone automatically " +
-      "(export a backup first if you want to be able to revert). Continue?"
+      " to Groq and replace each with an AI-reworded version. You can revert afterwards with " +
+      "the Undo AI button. Continue?"
     )) {
       return;
     }
+
+    setUndoSnapshot("AI Enhance All", JSON.parse(JSON.stringify(state.data)));
 
     var originalLabel = button.textContent;
     button.disabled = true;
@@ -1426,6 +1476,7 @@
   function applyChatActions(actions) {
     var summary = [];
     var changed = false;
+    var preState = JSON.stringify(state.data);
 
     (actions || []).forEach(function (a) {
       if (!a || typeof a !== "object") return;
@@ -1504,6 +1555,7 @@
     });
 
     if (changed) {
+      setUndoSnapshot("AI chat update", JSON.parse(preState));
       saveData();
       renderList();
       if (state.activeSection === "report") renderReportView();
@@ -1608,6 +1660,7 @@
   document.getElementById("btnEnhanceAll").addEventListener("click", function (e) {
     enhanceAllEntries(e.currentTarget);
   });
+  btnUndoAi.addEventListener("click", undoLastAi);
 
   document.getElementById("btnSettings").addEventListener("click", openSettingsModal);
   document.getElementById("btnSaveSettings").addEventListener("click", handleSaveSettings);
@@ -1648,4 +1701,5 @@
   loadData();
   renderList();
   showSelected();
+  updateUndoButton();
 })();

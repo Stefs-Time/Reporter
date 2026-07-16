@@ -144,8 +144,16 @@ instead of guessing. Press **Enter** to send (Shift+Enter for a new line).
 The key is stored only in this browser's local storage on this PC, and is sent
 directly from your browser to Groq's API — it never passes through any other
 server. If a rewrite fails (bad key, no internet, rate limit), the button
-shows "Failed - retry" and an error message with the reason. Since Enhance All
-overwrites everything, export a backup first if you want to be able to revert.
+shows "Failed - retry" and an error message with the reason.
+
+## Undoing AI changes
+
+Whenever **AI Enhance All** or an **AI chat update** changes your data, an
+**↩ Undo AI** button appears in the header. Clicking it restores everything to
+exactly how it was before that AI change (it confirms first, and tells you
+which change it will undo). One level of undo is kept and it survives closing
+and reopening the app — and of course every field stays hand-editable after an
+enhance, so you can also just tweak individual results instead of reverting.
 
 ## Notes
 
