@@ -1028,6 +1028,14 @@
     "(e.g. \"in order to\", \"it is important to note\", \"moving forward\") and avoid buzzword-stuffing, " +
     "but keep it professional and fit for a business audience.";
 
+  var PRESERVE_TERMS_RULE =
+    "This is a corporate report where named things are chosen deliberately, so preserve every proper " +
+    "noun and identifier exactly as written — project and product names, tool and system names, " +
+    "people's names, shortcodes, ticket and reference numbers, dates, and figures. Do not translate, " +
+    "rename, abbreviate, re-spell, or swap any of these for a synonym, and never change the meaning " +
+    "of what is stated. You may improve the grammar, phrasing, and clarity of the surrounding wording, " +
+    "but the named things, numbers, and the underlying meaning must survive unchanged.";
+
   function buildRewritePrompt(label, contextName, extraContext, isList) {
     var parts = [];
     parts.push(
@@ -1054,6 +1062,7 @@
         "separate point and return the same number of points, one per line."
       );
     }
+    parts.push(PRESERVE_TERMS_RULE);
     parts.push(NO_INVENTING_RULE);
     parts.push("Do not pad it with filler, and do not add bullet characters or numbering.");
     parts.push("Return only the rewritten text, with no preamble, commentary, or quotation marks.");
@@ -1061,12 +1070,17 @@
   }
 
   function buildTitleRewritePrompt(contextOwner) {
-    return "You are tidying up a short project title for a technical status report" +
-      (contextOwner ? ' owned by "' + contextOwner + '"' : "") + ". Clean up the wording, casing, and " +
-      "grammar of the following project title without changing its subject or meaning, and without " +
-      "inventing a different or more specific name. Keep it concise — a short title, not a sentence " +
-      "or description. " + NO_INVENTING_RULE + " Return only the cleaned-up title, with no preamble, " +
-      "commentary, or quotation marks.";
+    return "You are lightly correcting a short project title for a technical status report" +
+      (contextOwner ? ' owned by "' + contextOwner + '"' : "") + ". This title is used in a " +
+      "corporate setting where the exact wording is deliberate, so make the smallest possible change. " +
+      "You may ONLY fix spelling and capitalisation, and expand a clear abbreviation to its full form " +
+      "(e.g. \"dev\" to \"Development\", \"mgmt\" to \"Management\", \"Q\" to \"Quarter\"). Do NOT " +
+      "reword, reorder, add or remove words, swap in synonyms, or change the name or meaning in any " +
+      "way — every original term must remain the same term, just correctly spelled and expanded. If " +
+      "the title is already correct, or you are unsure whether a change alters its meaning, return it " +
+      "exactly as given. Keep it concise — a short title, not a sentence or description. " +
+      NO_INVENTING_RULE + " Return only the corrected title, with no preamble, commentary, or " +
+      "quotation marks.";
   }
 
   function callGroqMessages(apiKey, model, messages) {
@@ -1115,8 +1129,10 @@
     return "You are creating a short project shortcode for a status report. From the project name " +
       "given below, produce a concise uppercase abbreviation of 2 to 5 characters (letters, optionally " +
       "with a digit, but no spaces or punctuation) that a reader could use to refer to the project — " +
-      "typically the initials of its main words. Derive it only from the given project name; do not " +
-      "introduce unrelated words or invent a different name. Return only the shortcode, nothing else.";
+      "normally the initials of its main words, in their original order. Derive it strictly and only " +
+      "from the words actually present in the given project name: do not introduce unrelated letters, " +
+      "pull in words that are not in the name, or invent a different or more specific name. If the " +
+      "name is a single word, use its opening letters. Return only the shortcode, nothing else.";
   }
 
   function sanitizeShortcode(v) {
@@ -1425,8 +1441,11 @@
       '3. {"action":"add_project","name":"...","owner":"...","shortcode":"...","points":["..."]} — only ' +
       "when the user clearly describes a brand-new project.\n\n" +
       "Rules: " + VOICE_RULE + " Never restate the project name inside a point — it is shown as a " +
-      "heading. " + NO_INVENTING_RULE + " If the message is ambiguous, or you cannot confidently match " +
-      'a project, return an empty actions array and ask one short clarifying question in "reply".';
+      "heading. " + PRESERVE_TERMS_RULE + " " + NO_INVENTING_RULE + " Only ever match an existing " +
+      "project by the shortcode or name the user actually gives; never rename a project, alter its " +
+      "shortcode, or reword an existing point beyond the grammar/clarity clean-up above. If the " +
+      "message is ambiguous, or you cannot confidently match a project, return an empty actions array " +
+      'and ask one short clarifying question in "reply".';
   }
 
   function extractJsonObject(text) {
