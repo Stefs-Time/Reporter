@@ -1061,12 +1061,17 @@
   }
 
   function buildTitleRewritePrompt(contextOwner) {
-    return "You are tidying up a short project title for a technical status report" +
-      (contextOwner ? ' owned by "' + contextOwner + '"' : "") + ". Clean up the wording, casing, and " +
-      "grammar of the following project title without changing its subject or meaning, and without " +
-      "inventing a different or more specific name. Keep it concise — a short title, not a sentence " +
-      "or description. " + NO_INVENTING_RULE + " Return only the cleaned-up title, with no preamble, " +
-      "commentary, or quotation marks.";
+    return "You are lightly correcting a short project title for a technical status report" +
+      (contextOwner ? ' owned by "' + contextOwner + '"' : "") + ". This title is used in a " +
+      "corporate setting where the exact wording is deliberate, so make the smallest possible change. " +
+      "You may ONLY fix spelling and capitalisation, and expand a clear abbreviation to its full form " +
+      "(e.g. \"dev\" to \"Development\", \"mgmt\" to \"Management\", \"Q\" to \"Quarter\"). Do NOT " +
+      "reword, reorder, add or remove words, swap in synonyms, or change the name or meaning in any " +
+      "way — every original term must remain the same term, just correctly spelled and expanded. If " +
+      "the title is already correct, or you are unsure whether a change alters its meaning, return it " +
+      "exactly as given. Keep it concise — a short title, not a sentence or description. " +
+      NO_INVENTING_RULE + " Return only the corrected title, with no preamble, commentary, or " +
+      "quotation marks.";
   }
 
   function callGroqMessages(apiKey, model, messages) {
