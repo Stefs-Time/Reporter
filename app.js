@@ -71,6 +71,11 @@
     return p.shortcode ? "[" + p.shortcode + "] " + name : name;
   }
 
+  // Report/print headings use the project name only, without the shortcode prefix.
+  function projectReportName(p) {
+    return p.name || "Untitled Project";
+  }
+
   function linesToArray(text) {
     return (text || "")
       .split("\n")
@@ -566,7 +571,7 @@
   function renderEntryHtml(entry) {
     if (entry.type === "project") {
       var p = entry.data;
-      var heading = "<strong>" + escapeHtml(projectDisplayName(p)) + "</strong>";
+      var heading = "<strong>" + escapeHtml(projectReportName(p)) + "</strong>";
       var points = linesToArray(p.detail);
       if (points.length === 0) return "<li>" + heading + "</li>";
       if (points.length === 1) return "<li>" + heading + " — " + escapeHtml(points[0]) + "</li>";
@@ -575,7 +580,7 @@
     }
     var item = entry.data;
     var linked = item.projectId ? findProject(item.projectId) : null;
-    var linkedHtml = linked ? " <em>— Project: " + escapeHtml(projectDisplayName(linked)) + "</em>" : "";
+    var linkedHtml = linked ? " <em>— Project: " + escapeHtml(projectReportName(linked)) + "</em>" : "";
     return "<li>" + escapeHtml(item.text) + linkedHtml + "</li>";
   }
 
@@ -634,14 +639,14 @@
       var p = entry.data;
       var points = linesToArray(p.detail);
       if (points.length <= 1) {
-        return "- " + projectDisplayName(p) + (points.length ? ": " + points[0] : "");
+        return "- " + projectReportName(p) + (points.length ? ": " + points[0] : "");
       }
-      return "- " + projectDisplayName(p) + "\n" +
+      return "- " + projectReportName(p) + "\n" +
         points.map(function (pt) { return "  - " + pt; }).join("\n");
     }
     var item = entry.data;
     var linked = item.projectId ? findProject(item.projectId) : null;
-    return "- " + item.text + (linked ? " (Project: " + projectDisplayName(linked) + ")" : "");
+    return "- " + item.text + (linked ? " (Project: " + projectReportName(linked) + ")" : "");
   }
 
   function categoryGroupPlainText(catGroup) {
@@ -1046,8 +1051,14 @@
     parts.push(VOICE_RULE);
     parts.push(
       "Use correct domain terminology (e.g. data model, refresh, pipeline, access, workspace) where it " +
-      "fits the source text, and keep enough concrete detail (what changed, what's blocking, what's " +
-      "next) that each point stands on its own for someone reading it before the meeting."
+      "fits the source text, but keep every point tight and short — a single crisp sentence (or two at " +
+      "most) that captures the essence of the update. Do not expand, elaborate, or add background beyond " +
+      "what the source states."
+    );
+    parts.push(
+      "Never repeat yourself: do not restate the same idea, fact, or phrasing more than once, and do not " +
+      "circle back to a topic already covered. Each point must say something distinct — if two points " +
+      "would say the same thing, keep only the clearest one. Prefer brevity over completeness."
     );
     if (contextName) {
       parts.push(

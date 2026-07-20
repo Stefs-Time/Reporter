@@ -1,0 +1,10 @@
+{
+  "name": "Project Feedback Tracker",
+  "short_name": "Feedback Tracker",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "theme_color": "#4f6bd8",
+  "background_color": "#ffffff",
+  "display": "standalone"
+}
