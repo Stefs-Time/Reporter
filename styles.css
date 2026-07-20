@@ -738,6 +738,128 @@ body {
   background: #fff;
 }
 
+/* ---- Accessibility: keyboard focus & reduced motion ---- */
+
+/* Visible focus ring for keyboard users on interactive controls.
+   (Mouse clicks don't trigger :focus-visible, so this stays out of the way.) */
+.btn:focus-visible,
+.nav-btn:focus-visible,
+.btn-rewrite:focus-visible,
+.copy-category-btn:focus-visible,
+.chat-fab:focus-visible,
+.flag-checkbox:focus-within {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Inputs already signal focus with a border/background change,
+   so suppress the doubled ring there. */
+.form-field input:focus-visible,
+.form-field textarea:focus-visible,
+.sidebar-search input:focus-visible,
+.chat-input-row textarea:focus-visible,
+#groqApiKeyInput:focus-visible,
+#groqModelInput:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .btn:hover,
+  .btn:active,
+  .nav-btn:hover,
+  .project-list li:hover,
+  .gallery-tile:hover,
+  .chat-fab:hover {
+    transform: none;
+  }
+}
+
+/* ---- Responsive: stack the two-pane layout on narrow screens ---- */
+
+@media (max-width: 768px) {
+  /* Let the document flow and scroll naturally instead of trapping
+     content inside fixed-height flex panes. */
+  html, body { height: auto; }
+  body { min-height: 100%; }
+
+  .app-header {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+  .app-header h1 { font-size: 18px; }
+  .header-actions { gap: 6px; }
+  .header-actions .btn { padding: 7px 11px; font-size: 13px; }
+
+  .app-body {
+    flex-direction: column;
+    padding: 14px;
+    gap: 14px;
+    overflow: visible;
+  }
+
+  /* Sidebar spans the full width and sits above the editor. */
+  .sidebar {
+    width: 100%;
+    flex-shrink: 1;
+    max-height: none;
+  }
+
+  /* Cap the list so the nav + list stay compact and the editor
+     below is reachable without a long scroll. */
+  .project-list {
+    max-height: 42vh;
+  }
+
+  .editor {
+    overflow: visible;
+    width: 100%;
+    padding: 0;
+  }
+
+  /* These panes cap their width for desktop reading comfort; on a
+     stacked layout let them use the space they have. */
+  .project-form,
+  .gallery-view,
+  .report-view {
+    max-width: none;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Title on its own line, action buttons wrap beneath it. */
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .header-actions { justify-content: flex-start; }
+
+  /* Owner / Name / Shortcode stack instead of being squeezed. */
+  .form-row { flex-direction: column; gap: 0; }
+  .form-field-shortcode { flex: 1; }
+
+  .project-form { padding: 20px 18px; }
+  .print-card { padding: 16px 16px; }
+  .gallery-title { font-size: 16px; }
+
+  /* Chat becomes a bottom sheet that fits the viewport width. */
+  .chat-fab { bottom: 16px; right: 16px; }
+  .chat-panel {
+    left: 16px;
+    right: 16px;
+    width: auto;
+    bottom: 80px;
+    max-height: calc(100vh - 110px);
+  }
+}
+
 /* ---- Print handling ---- */
 .print-only { display: none; }
 
