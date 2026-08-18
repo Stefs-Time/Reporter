@@ -987,12 +987,26 @@
   var groqApiKeyInputEl = document.getElementById("groqApiKeyInput");
   var groqModelInputEl = document.getElementById("groqModelInput");
 
+  var DEFAULT_MODEL = "openai/gpt-oss-120b";
+
+  // Groq shut these models down (free/dev tiers, Jul–Aug 2026); calling them returns a 400,
+  // so saved settings that still reference one are mapped to Groq's recommended replacement.
+  var RETIRED_MODELS = {
+    "llama-3.3-70b-versatile": "openai/gpt-oss-120b",
+    "llama-3.1-8b-instant": "openai/gpt-oss-20b",
+    "meta-llama/llama-4-scout-17b-16e-instruct": "openai/gpt-oss-120b"
+  };
+
   function loadAiSettings() {
     try {
       var raw = localStorage.getItem(SETTINGS_KEY);
-      return raw ? JSON.parse(raw) : { apiKey: "", model: "llama-3.3-70b-versatile" };
+      var settings = raw ? JSON.parse(raw) : { apiKey: "", model: DEFAULT_MODEL };
+      if (!settings.model || RETIRED_MODELS[settings.model]) {
+        settings.model = RETIRED_MODELS[settings.model] || DEFAULT_MODEL;
+      }
+      return settings;
     } catch (e) {
-      return { apiKey: "", model: "llama-3.3-70b-versatile" };
+      return { apiKey: "", model: DEFAULT_MODEL };
     }
   }
 
@@ -1003,7 +1017,7 @@
   function openSettingsModal() {
     var settings = loadAiSettings();
     groqApiKeyInputEl.value = settings.apiKey || "";
-    groqModelInputEl.value = settings.model || "llama-3.3-70b-versatile";
+    groqModelInputEl.value = settings.model || DEFAULT_MODEL;
     settingsModalEl.hidden = false;
   }
 
