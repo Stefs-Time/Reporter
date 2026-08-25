@@ -23,6 +23,10 @@ Everything lives on a single page:
 
 Tip: to find something in a long list, just use the browser's find (**Ctrl+F**).
 
+The app opens in **dark mode**. The **☀️ / 🌙 button** in the header switches
+between dark and light, and your choice is remembered on this PC. The printed
+report is always black-on-white regardless of the theme.
+
 ### Projects
 
 Each project card has, all on one line: **Owner**, **Project Name**, and an

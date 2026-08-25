@@ -79,6 +79,32 @@
       .filter(function (l) { return l.length > 0; });
   }
 
+  // ---- Theme (dark by default, ☀️/🌙 toggle, remembered per browser) ----
+
+  var THEME_KEY = "projectFeedbackTracker.theme";
+  var btnThemeEl = document.getElementById("btnTheme");
+  var themeMetaEl = document.querySelector('meta[name="theme-color"]');
+
+  function applyTheme(theme) {
+    if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+    else document.documentElement.removeAttribute("data-theme");
+    btnThemeEl.textContent = theme === "light" ? "🌙" : "☀️";
+    btnThemeEl.title = theme === "light" ? "Switch to dark mode" : "Switch to light mode";
+    if (themeMetaEl) themeMetaEl.setAttribute("content", theme === "light" ? "#4f6bd8" : "#1d212b");
+  }
+
+  function loadTheme() {
+    var theme = null;
+    try { theme = localStorage.getItem(THEME_KEY); } catch (e) { /* private mode etc. */ }
+    return theme === "light" ? "light" : "dark";
+  }
+
+  function toggleTheme() {
+    var next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* non-fatal */ }
+    applyTheme(next);
+  }
+
   // ---- Persistence + "Saved" stamp ----
   // Every edit writes straight to localStorage — there is no Save button.
 
@@ -1572,6 +1598,7 @@
     enhanceAllEntries(e.currentTarget);
   });
   btnUndoAi.addEventListener("click", undoLastAi);
+  btnThemeEl.addEventListener("click", toggleTheme);
 
   document.getElementById("btnSettings").addEventListener("click", openSettingsModal);
   document.getElementById("btnSaveSettings").addEventListener("click", handleSaveSettings);
@@ -1636,6 +1663,7 @@
 
   // ---- Init ----
 
+  applyTheme(loadTheme());
   loadData();
   rebuildAll();
   updateUndoButton();

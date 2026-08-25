@@ -1,19 +1,73 @@
+/* Dark theme is the default; [data-theme="light"] switches every token.
+   color-scheme keeps native widgets (scrollbars, dropdowns) matching. */
 :root {
+  color-scheme: dark;
+  --bg: #14161d;
+  --surface: #1d212b;
+  --surface-2: #272c38;
+  --input-focus-bg: #2b3140;
+  --border: #2c3240;
+  --border-strong: #3b4353;
+  --text: #e7eaf1;
+  --muted: #9aa3b5;
+  --accent: #5b76e0;
+  --accent-hover: #6d86ea;
+  --accent-ink: #9db0f7;
+  --accent-soft: rgba(91, 118, 224, 0.18);
+  --focus-ring: rgba(91, 118, 224, 0.35);
+  --danger: #e06b63;
+  --danger-soft: rgba(224, 107, 99, 0.15);
+  --danger-border: rgba(224, 107, 99, 0.45);
+  --ok: #5fc98b;
+  --hl-edge: #d9a935;
+  --hl-bg: rgba(217, 169, 53, 0.18);
+  --hl-ink: #e8c46a;
+  --hl-border: rgba(217, 169, 53, 0.45);
+  --hold-edge: #7f8b9c;
+  --hold-bg: rgba(127, 139, 156, 0.2);
+  --hold-ink: #b3bdcb;
+  --hold-border: rgba(127, 139, 156, 0.5);
+  --ai-bg: rgba(151, 117, 224, 0.15);
+  --ai-ink: #b9a1ef;
+  --ai-border: rgba(151, 117, 224, 0.4);
+  --preview-bg: #10131a;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
   --bg: #f2f4f8;
   --surface: #ffffff;
   --surface-2: #f4f6fa;
+  --input-focus-bg: #ffffff;
   --border: #e3e7ef;
   --border-strong: #d3d9e4;
   --text: #1c2333;
   --muted: #647082;
   --accent: #4f6bd8;
-  --accent-dark: #3d55b8;
+  --accent-hover: #3d55b8;
+  --accent-ink: #3d55b8;
   --accent-soft: #eef1fc;
+  --focus-ring: rgba(79, 107, 216, 0.15);
   --danger: #c0362e;
   --danger-soft: #fdecea;
+  --danger-border: rgba(192, 54, 46, 0.4);
   --ok: #1f7a45;
-  --radius: 12px;
-  --radius-sm: 8px;
+  --hl-edge: #e3b341;
+  --hl-bg: #fff4cf;
+  --hl-ink: #7a5c00;
+  --hl-border: #d9b64a;
+  --hold-edge: #8a95a3;
+  --hold-bg: #e9edf2;
+  --hold-ink: #45505c;
+  --hold-border: #9aa5b1;
+  --ai-bg: #f4effc;
+  --ai-ink: #5b3fae;
+  --ai-border: rgba(123, 90, 214, 0.3);
+  --preview-bg: #e9ecf3;
   --shadow-sm: 0 1px 2px rgba(23, 30, 55, 0.06);
   --shadow: 0 8px 24px rgba(23, 30, 55, 0.10);
 }
@@ -98,10 +152,7 @@ body {
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.btn:hover {
-  background: var(--surface-2);
-  border-color: #bfc7d6;
-}
+.btn:hover { background: var(--surface-2); }
 
 .btn-primary {
   background: var(--accent);
@@ -111,9 +162,11 @@ body {
 }
 
 .btn-primary:hover {
-  background: var(--accent-dark);
-  border-color: var(--accent-dark);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
+
+.btn-icon { padding: 7px 10px; }
 
 /* ---- Dropdown menu (header "More") ---- */
 
@@ -178,7 +231,7 @@ body {
   flex-shrink: 0;
   overflow-y: auto;
   padding: 18px 20px 60px;
-  background: #e9ecf3;
+  background: var(--preview-bg);
   border-left: 1px solid var(--border);
 }
 
@@ -253,9 +306,9 @@ body {
   margin-bottom: 10px;
 }
 
-.pcard.is-hl { border-left-color: #e3b341; }
+.pcard.is-hl { border-left-color: var(--hl-edge); }
 .pcard.is-risk { border-left-color: var(--danger); }
-.pcard.is-hold { border-left-color: #8a95a3; }
+.pcard.is-hold { border-left-color: var(--hold-edge); }
 
 .pcard-top {
   display: flex;
@@ -290,9 +343,9 @@ body {
 .pcard textarea:focus,
 .irow textarea:focus,
 .irow select:focus {
-  background: #fff;
+  background: var(--input-focus-bg);
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(79, 107, 216, 0.15);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .f-owner { width: 150px; }
@@ -320,21 +373,21 @@ body {
 .chip:hover { background: var(--surface-2); }
 
 .chip.on-flagHighlight {
-  background: #fff4cf;
-  color: #7a5c00;
-  border-color: #d9b64a;
+  background: var(--hl-bg);
+  color: var(--hl-ink);
+  border-color: var(--hl-border);
 }
 
 .chip.on-flagRisk {
   background: var(--danger-soft);
   color: var(--danger);
-  border-color: rgba(192, 54, 46, 0.4);
+  border-color: var(--danger-border);
 }
 
 .chip.on-flagOnHold {
-  background: #e9edf2;
-  color: #45505c;
-  border-color: #9aa5b1;
+  background: var(--hold-bg);
+  color: var(--hold-ink);
+  border-color: var(--hold-border);
 }
 
 .btn-x {
@@ -371,18 +424,18 @@ body {
 
 .btn-ai {
   flex-shrink: 0;
-  border: 1px solid rgba(123, 90, 214, 0.3);
-  background: #f4effc;
-  color: #5b3fae;
+  border: 1px solid var(--ai-border);
+  background: var(--ai-bg);
+  color: var(--ai-ink);
   border-radius: var(--radius-sm);
   font-size: 13px;
   font-family: inherit;
   padding: 7px 10px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 
-.btn-ai:hover { background: #eae1f8; }
+.btn-ai:hover { border-color: var(--ai-ink); }
 
 .btn-ai:disabled {
   opacity: 0.6;
@@ -392,7 +445,7 @@ body {
 .btn-ai.error {
   background: var(--danger-soft);
   color: var(--danger);
-  border-color: rgba(192, 54, 46, 0.3);
+  border-color: var(--danger-border);
 }
 
 /* ---- Standalone item rows ---- */
@@ -482,7 +535,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin: 0 0 6px 0;
-  color: var(--accent-dark);
+  color: var(--accent-ink);
 }
 
 .report-project { margin: 0 0 10px 0; }
@@ -514,7 +567,7 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(28, 35, 51, 0.4);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -528,7 +581,7 @@ body {
   padding: 24px;
   width: 440px;
   max-width: calc(100vw - 32px);
-  box-shadow: 0 20px 50px rgba(23, 30, 55, 0.3);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
 }
 
 .modal h2 {
@@ -550,7 +603,7 @@ body {
   font-size: 12.5px;
   font-weight: 600;
   margin-bottom: 4px;
-  color: #39414f;
+  color: var(--text);
 }
 
 .form-field input,
@@ -561,7 +614,7 @@ body {
   border-radius: var(--radius-sm);
   font-size: 13.5px;
   font-family: inherit;
-  background: var(--surface);
+  background: var(--surface-2);
   color: var(--text);
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -570,7 +623,7 @@ body {
 .form-field input:focus,
 .form-field select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(79, 107, 216, 0.15);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .form-actions {
@@ -601,7 +654,7 @@ body {
 
 .chat-fab:hover {
   transform: translateY(-2px);
-  background: var(--accent-dark);
+  background: var(--accent-hover);
 }
 
 .chat-panel {
@@ -617,7 +670,7 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 20px 50px rgba(23, 30, 55, 0.28);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
   z-index: 45;
   overflow: hidden;
 }
@@ -648,7 +701,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: var(--surface-2);
+  background: var(--bg);
 }
 
 .chat-msg {
@@ -690,14 +743,14 @@ body {
   font-size: 13px;
   font-family: inherit;
   resize: none;
-  background: var(--surface);
+  background: var(--surface-2);
   color: var(--text);
   outline: none;
 }
 
 .chat-input-row textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(79, 107, 216, 0.15);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 /* ---- Accessibility: keyboard focus & reduced motion ---- */
@@ -791,7 +844,7 @@ body {
   }
 }
 
-/* ---- Print handling ---- */
+/* ---- Print handling: paper is always black-on-white, whatever the theme ---- */
 
 .print-only { display: none; }
 
@@ -808,6 +861,7 @@ body {
     top: 0;
     left: 0;
     width: 100%;
+    color: #000;
   }
   .no-print { display: none !important; }
 
