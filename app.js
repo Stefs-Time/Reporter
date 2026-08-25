@@ -12,10 +12,10 @@
     powerBi: { label: "Power BI Help Desk Request", listLabel: "Power BI Help Desk", printHeading: "Open Help Desk Requests - Power BI Department" }
   };
 
+  var ITEM_SECTION_KEYS = ["risks", "onHold", "itRequests", "powerBi"];
+
   var state = {
-    data: { projects: [], risks: [], onHold: [], itRequests: [], powerBi: [] },
-    activeSection: "projects",
-    selectedId: null
+    data: { projects: [], risks: [], onHold: [], itRequests: [], powerBi: [] }
   };
 
   function emptyData() {
@@ -58,10 +58,6 @@
     return div.innerHTML;
   }
 
-  function currentArray(section) {
-    return state.data[section];
-  }
-
   function findProject(id) {
     return state.data.projects.find(function (p) { return p.id === id; });
   }
@@ -83,358 +79,161 @@
       .filter(function (l) { return l.length > 0; });
   }
 
-  // ---- Sidebar nav ----
+  // ---- Persistence + "Saved" stamp ----
+  // Every edit writes straight to localStorage — there is no Save button.
 
-  var navButtons = document.querySelectorAll(".nav-btn");
-  var searchBoxEl = document.getElementById("searchBox");
-  var itemListEl = document.getElementById("itemList");
-  var btnNewItem = document.getElementById("btnNewItem");
+  var saveStampEl = document.getElementById("saveStamp");
+  var saveStampTimer = null;
 
-  var sidebarListSectionEl = document.getElementById("sidebarListSection");
+  function persist() {
+    saveData();
+    saveStampEl.textContent = "✓ Saved";
+    saveStampEl.classList.add("visible");
+    clearTimeout(saveStampTimer);
+    saveStampTimer = setTimeout(function () { saveStampEl.classList.remove("visible"); }, 1500);
+  }
+
+  // ---- Single-screen inline editor ----
+
+  var listEls = {
+    projects: document.getElementById("list-projects"),
+    risks: document.getElementById("list-risks"),
+    onHold: document.getElementById("list-onHold"),
+    itRequests: document.getElementById("list-itRequests"),
+    powerBi: document.getElementById("list-powerBi")
+  };
   var reportViewEl = document.getElementById("reportView");
-  var galleryViewEl = document.getElementById("galleryView");
+  var ownerOptionsEl = document.getElementById("ownerOptions");
 
-  function sectionTitle(section) {
-    return section === "projects" ? "Projects" : ITEM_SECTIONS[section].listLabel;
+  function autoGrow(ta) {
+    ta.style.height = "auto";
+    ta.style.height = (ta.scrollHeight + 2) + "px";
   }
 
-  function setActiveSection(section) {
-    flushAutosave();
-    state.activeSection = section;
-    state.selectedId = null;
-    navButtons.forEach(function (btn) {
-      btn.classList.toggle("active", btn.getAttribute("data-section") === section);
-    });
-    searchBoxEl.value = "";
+  function makeInput(className, placeholder, value) {
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = className;
+    input.placeholder = placeholder;
+    input.value = value || "";
+    return input;
+  }
 
-    if (section === "report") {
-      sidebarListSectionEl.hidden = true;
-      renderReportView();
-    } else {
-      sidebarListSectionEl.hidden = false;
-      btnNewItem.textContent = section === "projects" ? "+ New Project" : "+ New " + ITEM_SECTIONS[section].label;
-      renderList();
+  function touch(record) {
+    record.updatedAt = nowIso();
+    persist();
+    queueReportRefresh();
+  }
+
+  function buildProjectCard(p) {
+    var card = document.createElement("div");
+    card.className = "pcard";
+    card.title = p.updatedAt ? "Updated " + formatDate(p.updatedAt) : "";
+
+    function syncAccent() {
+      card.classList.toggle("is-risk", !!p.flagRisk);
+      card.classList.toggle("is-hold", !p.flagRisk && !!p.flagOnHold);
+      card.classList.toggle("is-hl", !p.flagRisk && !p.flagOnHold && !!p.flagHighlight);
     }
-    showSelected();
-  }
+    syncAccent();
 
-  // ---- Rendering: sidebar list ----
+    var top = document.createElement("div");
+    top.className = "pcard-top";
 
-  function sectionFlagKey(section) {
-    return section === "risks" ? "flagRisk" : (section === "onHold" ? "flagOnHold" : null);
-  }
+    var ownerInput = makeInput("f-owner", "Owner", p.owner);
+    ownerInput.setAttribute("list", "ownerOptions");
+    var nameInput = makeInput("f-name", "Project name", p.name);
+    var codeInput = makeInput("f-code", "Code", p.shortcode);
 
-  function sectionCount(section) {
-    if (section === "projects") return state.data.projects.length;
-    var count = state.data[section].length;
-    var flagKey = sectionFlagKey(section);
-    if (flagKey) {
-      count += state.data.projects.filter(function (p) { return p[flagKey]; }).length;
-    }
-    return count;
-  }
+    ownerInput.addEventListener("input", function () { p.owner = ownerInput.value.trim(); touch(p); });
+    nameInput.addEventListener("input", function () { p.name = nameInput.value.trim(); touch(p); });
+    codeInput.addEventListener("input", function () { p.shortcode = codeInput.value.trim().toUpperCase(); touch(p); });
 
-  function renderNavCounts() {
-    document.querySelectorAll(".nav-count").forEach(function (el) {
-      var count = sectionCount(el.getAttribute("data-count"));
-      el.textContent = count ? String(count) : "";
-    });
-  }
-
-  function projectListItem(p, isFlaggedInOtherSection) {
-    var li = document.createElement("li");
-    if (!isFlaggedInOtherSection && p.id === state.selectedId) li.className = "active";
-    var badges = "";
-    if (isFlaggedInOtherSection) badges += '<span class="badge badge-project">Project</span>';
-    if (p.flagHighlight) badges += '<span class="badge badge-highlight">Highlight</span>';
-    if (p.flagRisk) badges += '<span class="badge badge-risk">At Risk</span>';
-    if (p.flagOnHold) badges += '<span class="badge badge-onhold">On Hold</span>';
-    li.innerHTML =
-      '<div class="li-name"></div>' +
-      '<div class="li-owner"></div>' +
-      '<div class="li-badges">' + badges + "</div>" +
-      '<div class="li-updated"></div>';
-    li.querySelector(".li-name").textContent = projectDisplayName(p);
-    li.querySelector(".li-owner").textContent = p.owner || "Unassigned";
-    li.querySelector(".li-updated").textContent = p.updatedAt ? "Updated " + formatDate(p.updatedAt) : "";
-    li.addEventListener("click", function () {
-      if (isFlaggedInOtherSection) openProject(p.id);
-      else selectItem(p.id);
-    });
-    return li;
-  }
-
-  function renderList() {
-    renderNavCounts();
-    var filter = (searchBoxEl.value || "").toLowerCase();
-    itemListEl.innerHTML = "";
-
-    if (state.activeSection === "projects") {
-      var projects = state.data.projects
-        .filter(function (p) {
-          return p.name.toLowerCase().indexOf(filter) !== -1 ||
-            p.owner.toLowerCase().indexOf(filter) !== -1;
-        })
-        .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); });
-
-      projects.forEach(function (p) {
-        itemListEl.appendChild(projectListItem(p, false));
+    function makeChip(label, title, flagKey) {
+      var chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.textContent = label;
+      chip.title = title;
+      function sync() { chip.classList.toggle("on-" + flagKey, !!p[flagKey]); }
+      sync();
+      chip.addEventListener("click", function () {
+        p[flagKey] = !p[flagKey];
+        sync();
+        syncAccent();
+        touch(p);
       });
-
-      if (projects.length === 0) {
-        appendEmptyListMessage(state.data.projects.length === 0 ? "No projects yet." : "No matches.");
-      }
-      return;
+      return chip;
     }
 
-    // Risks / On Hold also list the projects flagged that way (clicking one
-    // jumps to the project), so the list matches what the report will show.
-    var flaggedShown = 0;
-    var flagKey = sectionFlagKey(state.activeSection);
-    if (flagKey) {
-      state.data.projects
-        .filter(function (p) {
-          return p[flagKey] && (
-            p.name.toLowerCase().indexOf(filter) !== -1 ||
-            p.owner.toLowerCase().indexOf(filter) !== -1
-          );
-        })
-        .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); })
-        .forEach(function (p) {
-          itemListEl.appendChild(projectListItem(p, true));
-          flaggedShown++;
+    var chips = document.createElement("div");
+    chips.className = "pcard-chips";
+    chips.appendChild(makeChip("⭐ Highlight", "Feature in Key Highlights on the report", "flagHighlight"));
+    chips.appendChild(makeChip("⚠️ Risk", "Move this project to the Risks section of the report", "flagRisk"));
+    chips.appendChild(makeChip("⏸ Hold", "Move this project to the On Hold section of the report", "flagOnHold"));
+
+    var delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "btn-x";
+    delBtn.textContent = "✕";
+    delBtn.title = "Delete project";
+    delBtn.addEventListener("click", function () {
+      if (!confirm('Delete project "' + (p.name || "Untitled Project") +
+        '"? Linked risk/on-hold/request items will keep their text but lose the project link. This cannot be undone.')) return;
+      state.data.projects = state.data.projects.filter(function (x) { return x.id !== p.id; });
+      ITEM_SECTION_KEYS.forEach(function (section) {
+        state.data[section].forEach(function (item) {
+          if (item.projectId === p.id) item.projectId = "";
         });
-    }
-
-    var items = currentArray(state.activeSection)
-      .filter(function (item) { return item.text.toLowerCase().indexOf(filter) !== -1; })
-      .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); });
-
-    items.forEach(function (item) {
-      var li = document.createElement("li");
-      if (item.id === state.selectedId) li.className = "active";
-      var linkedProject = item.projectId ? findProject(item.projectId) : null;
-      li.innerHTML =
-        '<div class="li-name"></div>' +
-        '<div class="li-owner"></div>' +
-        '<div class="li-updated"></div>';
-      var preview = item.text || "(empty)";
-      li.querySelector(".li-name").textContent = preview.length > 70 ? preview.slice(0, 70) + "..." : preview;
-      li.querySelector(".li-owner").textContent = linkedProject ? "Linked: " + linkedProject.name : "";
-      li.querySelector(".li-updated").textContent = item.updatedAt ? "Updated " + formatDate(item.updatedAt) : "";
-      li.addEventListener("click", function () { selectItem(item.id); });
-      itemListEl.appendChild(li);
+      });
+      persist();
+      rebuildAll();
     });
 
-    if (items.length === 0 && flaggedShown === 0) {
-      appendEmptyListMessage(
-        currentArray(state.activeSection).length === 0 ? "None logged yet." : "No matches."
-      );
-    }
+    top.appendChild(ownerInput);
+    top.appendChild(nameInput);
+    top.appendChild(codeInput);
+    top.appendChild(chips);
+    top.appendChild(delBtn);
+
+    var detailRow = document.createElement("div");
+    detailRow.className = "pcard-detail";
+
+    var ta = document.createElement("textarea");
+    ta.rows = 1;
+    ta.placeholder = "Status update — each line becomes its own bullet on the report";
+    ta.value = p.detail || "";
+    ta.addEventListener("input", function () {
+      p.detail = ta.value;
+      autoGrow(ta);
+      touch(p);
+    });
+
+    var aiBtn = document.createElement("button");
+    aiBtn.type = "button";
+    aiBtn.className = "btn-ai";
+    aiBtn.textContent = "✨";
+    aiBtn.title = "AI rewrite this status update";
+    aiBtn.addEventListener("click", function () {
+      var prompt = buildRewritePrompt("Latest Feedback / Status Caption", p.name || "", projectFlagContext(p), true);
+      runRewriteGeneric(aiBtn, prompt, ta.value, function (v) {
+        p.detail = v;
+        ta.value = v;
+        autoGrow(ta);
+        touch(p);
+      });
+    });
+
+    detailRow.appendChild(ta);
+    detailRow.appendChild(aiBtn);
+
+    card.appendChild(top);
+    card.appendChild(detailRow);
+    return card;
   }
 
-  function appendEmptyListMessage(text) {
-    var empty = document.createElement("li");
-    empty.className = "list-empty";
-    empty.textContent = text;
-    itemListEl.appendChild(empty);
-  }
-
-  // ---- Gallery (tiles in the main pane when nothing is selected) ----
-
-  function buildProjectTile(p) {
-    var tile = document.createElement("div");
-    tile.className = "gallery-tile";
-
-    var badges = "";
-    if (p.flagHighlight) badges += '<span class="badge badge-highlight">Highlight</span>';
-    if (p.flagRisk) badges += '<span class="badge badge-risk">At Risk</span>';
-    if (p.flagOnHold) badges += '<span class="badge badge-onhold">On Hold</span>';
-
-    var points = linesToArray(p.detail);
-    var pointsHtml = points.length
-      ? '<ul class="tile-points">' + points.map(function (pt) {
-          return "<li>" + escapeHtml(pt) + "</li>";
-        }).join("") + "</ul>"
-      : '<div class="tile-empty">No status caption yet.</div>';
-
-    tile.innerHTML =
-      '<div class="tile-title"></div>' +
-      '<div class="tile-owner"></div>' +
-      (badges ? '<div class="tile-badges">' + badges + "</div>" : "") +
-      pointsHtml;
-    tile.querySelector(".tile-title").textContent = projectDisplayName(p);
-    tile.querySelector(".tile-owner").textContent = p.owner || "Unassigned";
-    tile.addEventListener("click", function () { openProject(p.id); });
-    return tile;
-  }
-
-  function buildItemTile(item, section) {
-    var tile = document.createElement("div");
-    tile.className = "gallery-tile";
-    var linked = item.projectId ? findProject(item.projectId) : null;
-    tile.innerHTML =
-      '<div class="tile-text"></div>' +
-      (linked ? '<div class="tile-linked"></div>' : "");
-    tile.querySelector(".tile-text").textContent = item.text || "(empty)";
-    if (linked) tile.querySelector(".tile-linked").textContent = "Project: " + projectDisplayName(linked);
-    tile.addEventListener("click", function () { selectItem(item.id); });
-    return tile;
-  }
-
-  function galleryTilesFor(section, filter) {
-    var tiles = [];
-
-    function projectMatches(p) {
-      return p.name.toLowerCase().indexOf(filter) !== -1 ||
-        p.owner.toLowerCase().indexOf(filter) !== -1;
-    }
-    function itemMatches(item) {
-      return item.text.toLowerCase().indexOf(filter) !== -1;
-    }
-
-    if (section === "projects") {
-      state.data.projects
-        .slice()
-        .filter(projectMatches)
-        .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); })
-        .forEach(function (p) { tiles.push(buildProjectTile(p)); });
-      return tiles;
-    }
-
-    // Risks / On Hold also surface flagged projects; all four surface their own items.
-    var flagKey = sectionFlagKey(section);
-    if (flagKey) {
-      state.data.projects
-        .slice()
-        .filter(function (p) { return p[flagKey] && projectMatches(p); })
-        .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); })
-        .forEach(function (p) { tiles.push(buildProjectTile(p)); });
-    }
-
-    currentArray(section)
-      .slice()
-      .filter(itemMatches)
-      .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); })
-      .forEach(function (item) { tiles.push(buildItemTile(item, section)); });
-
-    return tiles;
-  }
-
-  function renderGallery() {
-    var section = state.activeSection;
-    var filter = (searchBoxEl.value || "").toLowerCase();
-    var tiles = galleryTilesFor(section, filter);
-
-    galleryViewEl.innerHTML = "";
-
-    if (tiles.length === 0) {
-      galleryViewEl.hidden = true;
-      emptyStateEl.hidden = false;
-      return;
-    }
-
-    emptyStateEl.hidden = true;
-    galleryViewEl.hidden = false;
-
-    var title = document.createElement("h2");
-    title.className = "gallery-title";
-    title.textContent = sectionTitle(section) + " (" + tiles.length + ")";
-    galleryViewEl.appendChild(title);
-
-    var grid = document.createElement("div");
-    grid.className = "gallery-grid";
-    tiles.forEach(function (t) { grid.appendChild(t); });
-    galleryViewEl.appendChild(grid);
-  }
-
-  function openProject(id) {
-    if (state.activeSection !== "projects") {
-      setActiveSection("projects");
-    }
-    selectItem(id);
-  }
-
-  // ---- Project form ----
-
-  var emptyStateEl = document.getElementById("emptyState");
-  var projectFormEl = document.getElementById("projectForm");
-  var itemFormEl = document.getElementById("itemForm");
-
-  var projectFields = {
-    id: document.getElementById("projectId"),
-    owner: document.getElementById("ownerInput"),
-    name: document.getElementById("nameInput"),
-    shortcode: document.getElementById("shortcodeInput"),
-    detail: document.getElementById("detailInput"),
-    flagHighlight: document.getElementById("flagHighlightInput"),
-    flagRisk: document.getElementById("flagRiskInput"),
-    flagOnHold: document.getElementById("flagOnHoldInput")
-  };
-
-  var itemFields = {
-    id: document.getElementById("itemId"),
-    section: document.getElementById("itemSection"),
-    text: document.getElementById("itemTextInput"),
-    label: document.getElementById("itemTextLabel"),
-    projectLink: document.getElementById("itemProjectLink")
-  };
-
-  function showSelected() {
-    var id = state.selectedId;
-
-    if (state.activeSection === "report") {
-      projectFormEl.hidden = true;
-      itemFormEl.hidden = true;
-      emptyStateEl.hidden = true;
-      galleryViewEl.hidden = true;
-      reportViewEl.hidden = false;
-      return;
-    }
-    reportViewEl.hidden = true;
-
-    if (!id) {
-      projectFormEl.hidden = true;
-      itemFormEl.hidden = true;
-      renderGallery();
-      return;
-    }
-
-    emptyStateEl.hidden = true;
-    galleryViewEl.hidden = true;
-
-    if (state.activeSection === "projects") {
-      var project = findProject(id);
-      if (!project) { state.selectedId = null; showSelected(); return; }
-      itemFormEl.hidden = true;
-      projectFormEl.hidden = false;
-
-      projectFields.id.value = project.id;
-      projectFields.owner.value = project.owner || "";
-      projectFields.name.value = project.name || "";
-      projectFields.shortcode.value = project.shortcode || "";
-      projectFields.detail.value = project.detail || "";
-      projectFields.flagHighlight.checked = !!project.flagHighlight;
-      projectFields.flagRisk.checked = !!project.flagRisk;
-      projectFields.flagOnHold.checked = !!project.flagOnHold;
-    } else {
-      var item = currentArray(state.activeSection).find(function (i) { return i.id === id; });
-      if (!item) { state.selectedId = null; showSelected(); return; }
-      projectFormEl.hidden = true;
-      itemFormEl.hidden = false;
-
-      itemFields.id.value = item.id;
-      itemFields.section.value = state.activeSection;
-      itemFields.text.value = item.text || "";
-      itemFields.label.textContent = ITEM_SECTIONS[state.activeSection].label + " Description";
-      populateProjectLinkOptions();
-      itemFields.projectLink.value = item.projectId || "";
-    }
-  }
-
-  function populateProjectLinkOptions() {
-    var current = itemFields.projectLink.value;
-    itemFields.projectLink.innerHTML = '<option value="">None</option>';
+  function populateLinkSelect(select, currentId) {
+    select.innerHTML = '<option value="">Link to project…</option>';
     state.data.projects
       .slice()
       .sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); })
@@ -442,169 +241,176 @@
         var opt = document.createElement("option");
         opt.value = p.id;
         opt.textContent = projectDisplayName(p);
-        itemFields.projectLink.appendChild(opt);
+        select.appendChild(opt);
       });
-    itemFields.projectLink.value = current;
+    select.value = currentId || "";
   }
 
-  function selectItem(id) {
-    flushAutosave();
-    state.selectedId = id;
-    renderList();
-    showSelected();
-  }
+  function buildItemRow(section, item) {
+    var row = document.createElement("div");
+    row.className = "irow";
+    row.title = item.updatedAt ? "Updated " + formatDate(item.updatedAt) : "";
 
-  function handleNewItem() {
-    var now = nowIso();
-    if (state.activeSection === "projects") {
-      var project = {
-        id: uid(),
-        owner: "",
-        name: "",
-        shortcode: "",
-        detail: "",
-        flagHighlight: false,
-        flagRisk: false,
-        flagOnHold: false,
-        createdAt: now,
-        updatedAt: now
-      };
-      state.data.projects.push(project);
-      saveData();
-      selectItem(project.id);
-      projectFields.owner.focus();
-    } else {
-      var item = { id: uid(), text: "", projectId: "", createdAt: now, updatedAt: now };
-      currentArray(state.activeSection).push(item);
-      saveData();
-      selectItem(item.id);
-      itemFields.text.focus();
-    }
-  }
+    var ta = document.createElement("textarea");
+    ta.rows = 1;
+    ta.placeholder = ITEM_SECTIONS[section].label + " — describe it";
+    ta.value = item.text || "";
+    ta.addEventListener("input", function () {
+      item.text = ta.value;
+      autoGrow(ta);
+      touch(item);
+    });
 
-  function flashSaved(formEl2) {
-    var btn = formEl2.querySelector('button[type="submit"]');
-    if (!btn) return;
-    var orig = btn.textContent;
-    btn.textContent = "Saved ✓";
-    setTimeout(function () { btn.textContent = orig; }, 1200);
-  }
+    var select = document.createElement("select");
+    select.className = "irow-link";
+    select.title = "Optional: link this item to a project";
+    populateLinkSelect(select, item.projectId);
+    select.addEventListener("change", function () {
+      item.projectId = select.value || "";
+      touch(item);
+    });
 
-  var projectSaveStatusEl = document.getElementById("projectSaveStatus");
-  var itemSaveStatusEl = document.getElementById("itemSaveStatus");
-
-  function showSaveStatus(el) {
-    el.textContent = "Saved ✓";
-    el.classList.add("visible");
-    clearTimeout(el._hideTimer);
-    el._hideTimer = setTimeout(function () { el.classList.remove("visible"); }, 1600);
-  }
-
-  function saveProjectFromForm() {
-    var project = findProject(projectFields.id.value);
-    if (!project) return false;
-
-    project.owner = projectFields.owner.value.trim();
-    project.name = projectFields.name.value.trim();
-    project.shortcode = projectFields.shortcode.value.trim();
-    project.detail = projectFields.detail.value.trim();
-    project.flagHighlight = projectFields.flagHighlight.checked;
-    project.flagRisk = projectFields.flagRisk.checked;
-    project.flagOnHold = projectFields.flagOnHold.checked;
-    project.updatedAt = nowIso();
-
-    saveData();
-    renderList();
-    return true;
-  }
-
-  function handleSaveProject(e) {
-    e.preventDefault();
-    if (saveProjectFromForm()) {
-      showSaveStatus(projectSaveStatusEl);
-      flashSaved(projectFormEl);
-    }
-  }
-
-  function handleDeleteProject() {
-    var id = projectFields.id.value;
-    var project = findProject(id);
-    if (!project) return;
-    if (!confirm('Delete project "' + project.name + '"? Linked risk/on-hold/request items will keep their text but lose the project link. This cannot be undone.')) return;
-
-    state.data.projects = state.data.projects.filter(function (p) { return p.id !== id; });
-    ["risks", "onHold", "itRequests", "powerBi"].forEach(function (section) {
-      state.data[section].forEach(function (item) {
-        if (item.projectId === id) item.projectId = "";
+    var aiBtn = document.createElement("button");
+    aiBtn.type = "button";
+    aiBtn.className = "btn-ai";
+    aiBtn.textContent = "✨";
+    aiBtn.title = "AI rewrite this item";
+    aiBtn.addEventListener("click", function () {
+      var linked = item.projectId ? findProject(item.projectId) : null;
+      var prompt = buildRewritePrompt(ITEM_SECTIONS[section].label, linked ? linked.name : "", "");
+      runRewriteGeneric(aiBtn, prompt, ta.value, function (v) {
+        item.text = v;
+        ta.value = v;
+        autoGrow(ta);
+        touch(item);
       });
     });
-    state.selectedId = null;
-    saveData();
-    renderList();
-    showSelected();
+
+    var delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "btn-x";
+    delBtn.textContent = "✕";
+    delBtn.title = "Delete item";
+    delBtn.addEventListener("click", function () {
+      if (!confirm("Delete this item? This cannot be undone.")) return;
+      state.data[section] = state.data[section].filter(function (x) { return x.id !== item.id; });
+      persist();
+      rebuildAll();
+    });
+
+    row.appendChild(ta);
+    row.appendChild(select);
+    row.appendChild(aiBtn);
+    row.appendChild(delBtn);
+    return row;
   }
 
-  function saveItemFromForm() {
-    var section = itemFields.section.value;
-    var item = currentArray(section).find(function (i) { return i.id === itemFields.id.value; });
-    if (!item) return false;
-
-    item.text = itemFields.text.value.trim();
-    item.projectId = itemFields.projectLink.value || "";
-    item.updatedAt = nowIso();
-
-    saveData();
-    renderList();
-    return true;
+  function updateCounts() {
+    document.querySelectorAll(".esec-count").forEach(function (el) {
+      var n = state.data[el.getAttribute("data-count")].length;
+      el.textContent = n ? String(n) : "";
+    });
   }
 
-  function handleSaveItem(e) {
-    e.preventDefault();
-    if (saveItemFromForm()) {
-      showSaveStatus(itemSaveStatusEl);
-      flashSaved(itemFormEl);
+  function appendEmptyNote(container, text) {
+    var note = document.createElement("div");
+    note.className = "esec-empty";
+    note.textContent = text;
+    container.appendChild(note);
+  }
+
+  function buildEditor() {
+    listEls.projects.innerHTML = "";
+    state.data.projects.forEach(function (p) {
+      listEls.projects.appendChild(buildProjectCard(p));
+    });
+    if (!state.data.projects.length) {
+      appendEmptyNote(listEls.projects, "No projects yet — click “+ Add Project” to start.");
+    }
+
+    ITEM_SECTION_KEYS.forEach(function (section) {
+      listEls[section].innerHTML = "";
+      state.data[section].forEach(function (item) {
+        listEls[section].appendChild(buildItemRow(section, item));
+      });
+      if (!state.data[section].length) {
+        appendEmptyNote(listEls[section], "None — click “+ Add” if you need one.");
+      }
+    });
+
+    updateCounts();
+    document.querySelectorAll(".editor textarea").forEach(autoGrow);
+  }
+
+  function addProject() {
+    var now = nowIso();
+    state.data.projects.unshift({
+      id: uid(), owner: "", name: "", shortcode: "", detail: "",
+      flagHighlight: false, flagRisk: false, flagOnHold: false,
+      createdAt: now, updatedAt: now
+    });
+    persist();
+    rebuildAll();
+    var firstInput = listEls.projects.querySelector("input");
+    if (firstInput) {
+      firstInput.focus();
+      firstInput.scrollIntoView({ block: "nearest" });
     }
   }
 
-  // ---- Autosave: edits persist automatically shortly after typing ----
-
-  var autosaveTimer = null;
-
-  function runAutosave() {
-    autosaveTimer = null;
-    if (!projectFormEl.hidden) {
-      if (saveProjectFromForm()) showSaveStatus(projectSaveStatusEl);
-    } else if (!itemFormEl.hidden) {
-      if (saveItemFromForm()) showSaveStatus(itemSaveStatusEl);
+  function addItem(section) {
+    var now = nowIso();
+    state.data[section].unshift({ id: uid(), text: "", projectId: "", createdAt: now, updatedAt: now });
+    persist();
+    rebuildAll();
+    var firstTa = listEls[section].querySelector("textarea");
+    if (firstTa) {
+      firstTa.focus();
+      firstTa.scrollIntoView({ block: "nearest" });
     }
   }
 
-  function queueAutosave() {
-    clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(runAutosave, 700);
+  // ---- Live report preview ----
+
+  function refreshOwnerDatalist() {
+    var owners = {};
+    state.data.projects.forEach(function (p) {
+      var o = (p.owner || "").trim();
+      if (o) owners[o] = true;
+    });
+    ownerOptionsEl.innerHTML = Object.keys(owners).sort().map(function (o) {
+      return '<option value="' + escapeHtml(o) + '">';
+    }).join("");
   }
 
-  // Save pending edits immediately before the form is swapped out
-  // (switching items/sections) or the page is closed.
-  function flushAutosave() {
-    if (autosaveTimer === null) return;
-    clearTimeout(autosaveTimer);
-    runAutosave();
+  // Refresh the project dropdowns on item rows in place (skipping the one
+  // being used) so renamed/added projects show up without rebuilding the DOM.
+  function refreshLinkSelects() {
+    document.querySelectorAll(".irow select").forEach(function (select) {
+      if (document.activeElement === select) return;
+      populateLinkSelect(select, select.value);
+    });
   }
 
-  function handleDeleteItem() {
-    var section = itemFields.section.value;
-    var id = itemFields.id.value;
-    if (!confirm("Delete this item? This cannot be undone.")) return;
-
-    state.data[section] = state.data[section].filter(function (i) { return i.id !== id; });
-    state.selectedId = null;
-    saveData();
-    renderList();
-    showSelected();
+  function refreshReport() {
+    reportViewEl.innerHTML = buildReportHtml(true);
+    refreshOwnerDatalist();
+    refreshLinkSelects();
+    updateCounts();
   }
 
-  // ---- Report: grouped by owner ----
+  var reportTimer = null;
+  function queueReportRefresh() {
+    clearTimeout(reportTimer);
+    reportTimer = setTimeout(refreshReport, 250);
+  }
+
+  function rebuildAll() {
+    buildEditor();
+    refreshReport();
+  }
+
+  // ---- Report: grouped by category, then owner ----
 
   var printAreaEl = document.getElementById("printArea");
 
@@ -749,10 +555,6 @@
     return heading + groups.map(function (g) { return renderCategoryBlockHtml(g, includeCopyButtons); }).join("");
   }
 
-  function renderReportView() {
-    reportViewEl.innerHTML = buildReportHtml(true);
-  }
-
   function hasAnyData() {
     return state.data.projects.length > 0 || state.data.risks.length > 0 ||
       state.data.onHold.length > 0 || state.data.itRequests.length > 0 || state.data.powerBi.length > 0;
@@ -845,7 +647,7 @@
       .catch(function (err) { alert("Copy failed: " + err.message); });
   }
 
-  // ---- Export / Import ----
+  // ---- Export / Import (JSON backup) ----
 
   function exportData() {
     var blob = new Blob([JSON.stringify(state.data, null, 2)], { type: "application/json" });
@@ -867,16 +669,12 @@
         if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.projects)) {
           throw new Error("Invalid file format");
         }
-        var hasExisting = state.data.projects.length + state.data.risks.length +
-          state.data.onHold.length + state.data.itRequests.length + state.data.powerBi.length > 0;
-        if (hasExisting) {
+        if (hasAnyData()) {
           if (!confirm("Importing will replace all existing data. Continue?")) return;
         }
         state.data = Object.assign(emptyData(), parsed);
-        state.selectedId = null;
         saveData();
-        renderList();
-        showSelected();
+        rebuildAll();
       } catch (e) {
         alert("Could not import file: " + e.message);
       }
@@ -930,7 +728,7 @@
         ""
       ]);
     });
-    ["risks", "onHold", "itRequests", "powerBi"].forEach(function (section) {
+    ITEM_SECTION_KEYS.forEach(function (section) {
       state.data[section].forEach(function (item) {
         var linked = item.projectId ? findProject(item.projectId) : null;
         rows.push([
@@ -1102,9 +900,8 @@
         if (!confirm(summary)) return;
 
         state.data = data;
-        state.selectedId = null;
         saveData();
-        setActiveSection("projects");
+        rebuildAll();
       } catch (e) {
         alert("Could not import CSV: " + e.message);
       }
@@ -1321,7 +1118,6 @@
     callGroq(settings.apiKey, settings.model, systemPrompt, text)
       .then(function (rewritten) {
         applyResult(rewritten);
-        queueAutosave();
         button.textContent = originalLabel;
         button.disabled = false;
       })
@@ -1341,40 +1137,6 @@
     if (project.flagOnHold) flags.push("On Hold");
     if (!flags.length) return "";
     return "This project is currently flagged as: " + flags.join(", ") + ".";
-  }
-
-  function handleRewriteProjectName(button) {
-    runRewriteGeneric(button, buildTitleRewritePrompt(projectFields.owner.value.trim()),
-      projectFields.name.value, function (v) { projectFields.name.value = v; });
-  }
-
-  function handleRewriteShortcode(button) {
-    runRewriteGeneric(button, buildShortcodePrompt(), projectFields.name.value,
-      function (v) { projectFields.shortcode.value = sanitizeShortcode(v); });
-  }
-
-  function handleRewriteProjectDetail(button) {
-    var project = findProject(projectFields.id.value);
-    var systemPrompt = buildRewritePrompt(
-      "Latest Feedback / Status Caption",
-      projectFields.name.value.trim(),
-      project ? projectFlagContext(project) : "",
-      true
-    );
-    runRewriteGeneric(button, systemPrompt, projectFields.detail.value,
-      function (v) { projectFields.detail.value = v; });
-  }
-
-  function handleRewriteItem(button) {
-    var sectionInfo = ITEM_SECTIONS[itemFields.section.value];
-    var linkedName = "";
-    if (itemFields.projectLink.value) {
-      var linked = findProject(itemFields.projectLink.value);
-      if (linked) linkedName = linked.name;
-    }
-    var systemPrompt = buildRewritePrompt(sectionInfo.label, linkedName, "");
-    runRewriteGeneric(button, systemPrompt, itemFields.text.value,
-      function (v) { itemFields.text.value = v; });
   }
 
   // ---- AI undo (one level, survives reload) ----
@@ -1417,12 +1179,9 @@
     if (!confirm('Undo "' + snap.label + '" from ' + formatDate(snap.ts) +
       "? All changes made since then — including manual edits — will be reverted.")) return;
     state.data = Object.assign(emptyData(), snap.data);
-    state.selectedId = null;
     saveData();
     clearUndoSnapshot();
-    renderList();
-    if (state.activeSection === "report") renderReportView();
-    showSelected();
+    rebuildAll();
   }
 
   // ---- AI enhance all ----
@@ -1460,7 +1219,7 @@
         });
       }
     });
-    ["risks", "onHold", "itRequests", "powerBi"].forEach(function (section) {
+    ITEM_SECTION_KEYS.forEach(function (section) {
       state.data[section].forEach(function (item) {
         if (!item.text || !item.text.trim()) return;
         tasks.push({
@@ -1509,9 +1268,7 @@
         button.disabled = false;
         button.textContent = originalLabel;
         saveData();
-        renderList();
-        showSelected();
-        if (state.activeSection === "report") renderReportView();
+        rebuildAll();
         if (failures.length) {
           alert("Enhanced " + (tasks.length - failures.length) + " of " + tasks.length +
             " entries. " + failures.length + " failed:\n" + failures.join("\n"));
@@ -1569,7 +1326,7 @@
           flags: { highlight: !!p.flagHighlight, at_risk: !!p.flagRisk, on_hold: !!p.flagOnHold }
         };
       }),
-      items: ["risks", "onHold", "itRequests", "powerBi"].reduce(function (acc, section) {
+      items: ITEM_SECTION_KEYS.reduce(function (acc, section) {
         acc[section] = state.data[section].map(function (item) {
           var linked = item.projectId ? findProject(item.projectId) : null;
           return { text: item.text, linked_shortcode: linked ? (linked.shortcode || "") : "" };
@@ -1733,9 +1490,7 @@
     if (changed) {
       setUndoSnapshot("AI chat update", JSON.parse(preState));
       saveData();
-      renderList();
-      if (state.activeSection === "report") renderReportView();
-      showSelected();
+      rebuildAll();
     }
     return summary;
   }
@@ -1782,14 +1537,12 @@
 
   // ---- Wiring ----
 
-  navButtons.forEach(function (btn) {
-    btn.addEventListener("click", function () { setActiveSection(btn.getAttribute("data-section")); });
-  });
-
-  btnNewItem.addEventListener("click", handleNewItem);
-  searchBoxEl.addEventListener("input", function () {
-    renderList();
-    if (!state.selectedId && state.activeSection !== "report") renderGallery();
+  document.querySelectorAll("[data-add]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var section = btn.getAttribute("data-add");
+      if (section === "projects") addProject();
+      else addItem(section);
+    });
   });
 
   document.getElementById("btnPrintReport").addEventListener("click", printReport);
@@ -1801,6 +1554,7 @@
     if (!btn) return;
     handleCopyCategoryBlock(btn.getAttribute("data-category"), btn);
   });
+
   document.getElementById("btnExportCsv").addEventListener("click", exportCsv);
   document.getElementById("importCsvFile").addEventListener("change", function (e) {
     var file = e.target.files[0];
@@ -1814,17 +1568,17 @@
     e.target.value = "";
   });
 
-  projectFormEl.addEventListener("submit", handleSaveProject);
-  document.getElementById("btnDeleteProject").addEventListener("click", handleDeleteProject);
+  document.getElementById("btnEnhanceAll").addEventListener("click", function (e) {
+    enhanceAllEntries(e.currentTarget);
+  });
+  btnUndoAi.addEventListener("click", undoLastAi);
 
-  itemFormEl.addEventListener("submit", handleSaveItem);
-  document.getElementById("btnDeleteItem").addEventListener("click", handleDeleteItem);
-
-  projectFormEl.addEventListener("input", queueAutosave);
-  projectFormEl.addEventListener("change", queueAutosave);
-  itemFormEl.addEventListener("input", queueAutosave);
-  itemFormEl.addEventListener("change", queueAutosave);
-  window.addEventListener("beforeunload", flushAutosave);
+  document.getElementById("btnSettings").addEventListener("click", openSettingsModal);
+  document.getElementById("btnSaveSettings").addEventListener("click", handleSaveSettings);
+  document.getElementById("btnCloseSettings").addEventListener("click", closeSettingsModal);
+  settingsModalEl.addEventListener("click", function (e) {
+    if (e.target === settingsModalEl) closeSettingsModal();
+  });
 
   // Header "More" dropdown menu
   var moreMenuEl = document.getElementById("moreMenu");
@@ -1851,31 +1605,6 @@
     if (e.target.closest(".menu-item")) closeMoreMenu();
   });
 
-  document.querySelector('.btn-rewrite[data-field="name"]').addEventListener("click", function (e) {
-    handleRewriteProjectName(e.currentTarget);
-  });
-  document.querySelector('.btn-rewrite[data-field="shortcode"]').addEventListener("click", function (e) {
-    handleRewriteShortcode(e.currentTarget);
-  });
-  document.querySelector('.btn-rewrite[data-field="detail"]').addEventListener("click", function (e) {
-    handleRewriteProjectDetail(e.currentTarget);
-  });
-  document.getElementById("btnRewriteItem").addEventListener("click", function (e) {
-    handleRewriteItem(e.currentTarget);
-  });
-
-  document.getElementById("btnEnhanceAll").addEventListener("click", function (e) {
-    enhanceAllEntries(e.currentTarget);
-  });
-  btnUndoAi.addEventListener("click", undoLastAi);
-
-  document.getElementById("btnSettings").addEventListener("click", openSettingsModal);
-  document.getElementById("btnSaveSettings").addEventListener("click", handleSaveSettings);
-  document.getElementById("btnCloseSettings").addEventListener("click", closeSettingsModal);
-  settingsModalEl.addEventListener("click", function (e) {
-    if (e.target === settingsModalEl) closeSettingsModal();
-  });
-
   document.getElementById("btnChatToggle").addEventListener("click", function () {
     chatPanelEl.hidden = !chatPanelEl.hidden;
     if (!chatPanelEl.hidden) chatInputEl.focus();
@@ -1898,15 +1627,16 @@
       if (!chatPanelEl.hidden) { chatPanelEl.hidden = true; }
       return;
     }
+    // Everything saves as you type, so Ctrl+S just confirms.
     if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
-      if (!projectFormEl.hidden) { e.preventDefault(); projectFormEl.requestSubmit(); }
-      else if (!itemFormEl.hidden) { e.preventDefault(); itemFormEl.requestSubmit(); }
+      e.preventDefault();
+      persist();
     }
   });
 
   // ---- Init ----
 
   loadData();
-  setActiveSection("projects");
+  rebuildAll();
   updateUndoButton();
 })();
