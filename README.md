@@ -9,14 +9,20 @@ entirely in your browser on Windows.
 2. Double-click `index.html`. It opens in your default browser (Edge, Chrome, etc.).
 3. That's it — no server, no Node, no Python needed.
 
-Data is saved automatically in the browser's local storage on that PC. Use
-**Export Data** regularly to back up your data to a `.json` file (and
-**Import Data** to restore or move it to another machine). To move data through a
-spreadsheet instead, use **Export CSV** / **Import CSV** (see below).
+Data is saved automatically in the browser's local storage on that PC — edits
+in a form are autosaved a moment after you stop typing (a "Saved ✓" note
+confirms it), and pending edits are also saved when you switch items or close
+the page. The **Save** button still works if you like pressing it.
+
+Backup and transfer actions live under the **⋯ More** menu (top right): use
+**Export Backup (JSON)** regularly to back up your data to a `.json` file (and
+**Import Backup (JSON)** to restore or move it to another machine). To move
+data through a spreadsheet instead, use **Export CSV** / **Import CSV** in the
+same menu (see below). **AI Settings** is there too.
 
 ## How it's organised
 
-The sidebar has five sections:
+The sidebar has five sections, each showing a live count of what's in it:
 
 - **Projects** — the master list of tracked projects. Each project is just:
   - Responsible Owner
@@ -32,6 +38,9 @@ The sidebar has five sections:
   lists of items. Each item is free text with an optional dropdown to link it to
   one of your projects (for extra risks/holds/requests that aren't just "the whole
   project is at risk", e.g. a specific data-source issue tied to a project).
+  The **Risks** and **On Hold** lists also show the projects flagged that way
+  (marked with a "Project" badge — clicking one jumps to the project), so each
+  section matches what the report will show.
 
 ## The report
 
@@ -40,13 +49,27 @@ screen before printing, grouped by category first and then by owner within
 each category, in this order:
 
 1. **Key Highlights** — every project flagged "Feature in Key Highlights"
-2. **In Progress** — every project *not* flagged At Risk or On Hold (automatic —
-   flag a project either way and it moves out of this section)
-3. **Risks** — projects flagged At Risk, plus any standalone Risk items (shows the
-   linked project name if one was set)
+2. **In Progress** — every project with *no* flag at all (automatic — flagging a
+   project as a Key Highlight, At Risk, or On Hold moves it out of this section
+   and into that one instead, so nothing is listed twice as both a highlight or
+   risk *and* in progress)
+3. **Risks** — projects flagged At Risk, plus any standalone Risk items
 4. **On Hold** — same pattern as Risks, using the On Hold flag and standalone items
 5. **Support Requests Opened to IT** — standalone IT Support Request items
 6. **Open Help Desk Requests - Power BI Department** — standalone Power BI items
+
+Every category renders in the same fixed shape — owner, then project, then the
+description as bullet points:
+
+> **Owner**
+> - Project
+>   - description point
+>   - description point
+
+Standalone items are grouped under their linked project's name (so a flagged
+project and its extra risk items appear as one project with a combined bullet
+list); items with no linked project appear as plain bullets under "Unassigned".
+The copied plain-text version follows the same structure.
 
 Deleting a project doesn't delete risk/on-hold/request items that were linked to
 it — they keep their text and just lose the link.
@@ -99,7 +122,7 @@ it's instructed to use only the facts, numbers, and details already present in
 the source text, and to keep things equally vague rather than invent specifics
 when the source is vague.
 
-There's also an **✨ AI Enhance All** button (top header) that runs the same
+There's also an **✨ Enhance All** button (top header) that runs the same
 rewrite over every project (name and caption) and every standalone item in one
 pass — useful before printing/copying the report. It also fills in a shortcode
 for any project that doesn't have one yet, but leaves existing shortcodes
@@ -136,10 +159,10 @@ instead of guessing. Press **Enter** to send (Shift+Enter for a new line).
 
 1. Create a free account at [console.groq.com](https://console.groq.com) and
    generate an API key (starts with `gsk_`). Groq's free tier needs no credit card.
-2. In the app, click **AI Settings** (top right), paste the key in, pick a model,
-   and click **Save**.
-3. Click **✨ Rewrite** next to the field you want reworded, **✨ AI Enhance
-   All** to rewrite everything at once, or **💬** to chat your updates in.
+2. In the app, open **⋯ More → AI Settings** (top right), paste the key in,
+   pick a model, and click **Save**.
+3. Click **✨ Rewrite** next to the field you want reworded, **✨ Enhance All**
+   to rewrite everything at once, or **💬** to chat your updates in.
 
 The key is stored only in this browser's local storage on this PC, and is sent
 directly from your browser to Groq's API — it never passes through any other
@@ -148,7 +171,7 @@ shows "Failed - retry" and an error message with the reason.
 
 ## Undoing AI changes
 
-Whenever **AI Enhance All** or an **AI chat update** changes your data, an
+Whenever **Enhance All** or an **AI chat update** changes your data, an
 **↩ Undo AI** button appears in the header. Clicking it restores everything to
 exactly how it was before that AI change (it confirms first, and tells you
 which change it will undo). One level of undo is kept and it survives closing

@@ -99,6 +99,7 @@
   }
 
   function setActiveSection(section) {
+    flushAutosave();
     state.activeSection = section;
     state.selectedId = null;
     navButtons.forEach(function (btn) {
@@ -119,7 +120,52 @@
 
   // ---- Rendering: sidebar list ----
 
+  function sectionFlagKey(section) {
+    return section === "risks" ? "flagRisk" : (section === "onHold" ? "flagOnHold" : null);
+  }
+
+  function sectionCount(section) {
+    if (section === "projects") return state.data.projects.length;
+    var count = state.data[section].length;
+    var flagKey = sectionFlagKey(section);
+    if (flagKey) {
+      count += state.data.projects.filter(function (p) { return p[flagKey]; }).length;
+    }
+    return count;
+  }
+
+  function renderNavCounts() {
+    document.querySelectorAll(".nav-count").forEach(function (el) {
+      var count = sectionCount(el.getAttribute("data-count"));
+      el.textContent = count ? String(count) : "";
+    });
+  }
+
+  function projectListItem(p, isFlaggedInOtherSection) {
+    var li = document.createElement("li");
+    if (!isFlaggedInOtherSection && p.id === state.selectedId) li.className = "active";
+    var badges = "";
+    if (isFlaggedInOtherSection) badges += '<span class="badge badge-project">Project</span>';
+    if (p.flagHighlight) badges += '<span class="badge badge-highlight">Highlight</span>';
+    if (p.flagRisk) badges += '<span class="badge badge-risk">At Risk</span>';
+    if (p.flagOnHold) badges += '<span class="badge badge-onhold">On Hold</span>';
+    li.innerHTML =
+      '<div class="li-name"></div>' +
+      '<div class="li-owner"></div>' +
+      '<div class="li-badges">' + badges + "</div>" +
+      '<div class="li-updated"></div>';
+    li.querySelector(".li-name").textContent = projectDisplayName(p);
+    li.querySelector(".li-owner").textContent = p.owner || "Unassigned";
+    li.querySelector(".li-updated").textContent = p.updatedAt ? "Updated " + formatDate(p.updatedAt) : "";
+    li.addEventListener("click", function () {
+      if (isFlaggedInOtherSection) openProject(p.id);
+      else selectItem(p.id);
+    });
+    return li;
+  }
+
   function renderList() {
+    renderNavCounts();
     var filter = (searchBoxEl.value || "").toLowerCase();
     itemListEl.innerHTML = "";
 
@@ -132,28 +178,32 @@
         .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); });
 
       projects.forEach(function (p) {
-        var li = document.createElement("li");
-        if (p.id === state.selectedId) li.className = "active";
-        var badges = "";
-        if (p.flagHighlight) badges += '<span class="badge badge-highlight">Highlight</span>';
-        if (p.flagRisk) badges += '<span class="badge badge-risk">At Risk</span>';
-        if (p.flagOnHold) badges += '<span class="badge badge-onhold">On Hold</span>';
-        li.innerHTML =
-          '<div class="li-name"></div>' +
-          '<div class="li-owner"></div>' +
-          '<div class="li-badges">' + badges + "</div>" +
-          '<div class="li-updated"></div>';
-        li.querySelector(".li-name").textContent = projectDisplayName(p);
-        li.querySelector(".li-owner").textContent = p.owner || "Unassigned";
-        li.querySelector(".li-updated").textContent = p.updatedAt ? "Updated " + formatDate(p.updatedAt) : "";
-        li.addEventListener("click", function () { selectItem(p.id); });
-        itemListEl.appendChild(li);
+        itemListEl.appendChild(projectListItem(p, false));
       });
 
       if (projects.length === 0) {
         appendEmptyListMessage(state.data.projects.length === 0 ? "No projects yet." : "No matches.");
       }
       return;
+    }
+
+    // Risks / On Hold also list the projects flagged that way (clicking one
+    // jumps to the project), so the list matches what the report will show.
+    var flaggedShown = 0;
+    var flagKey = sectionFlagKey(state.activeSection);
+    if (flagKey) {
+      state.data.projects
+        .filter(function (p) {
+          return p[flagKey] && (
+            p.name.toLowerCase().indexOf(filter) !== -1 ||
+            p.owner.toLowerCase().indexOf(filter) !== -1
+          );
+        })
+        .sort(function (a, b) { return (b.updatedAt || "").localeCompare(a.updatedAt || ""); })
+        .forEach(function (p) {
+          itemListEl.appendChild(projectListItem(p, true));
+          flaggedShown++;
+        });
     }
 
     var items = currentArray(state.activeSection)
@@ -176,15 +226,16 @@
       itemListEl.appendChild(li);
     });
 
-    if (items.length === 0) {
-      appendEmptyListMessage(currentArray(state.activeSection).length === 0 ? "None logged yet." : "No matches.");
+    if (items.length === 0 && flaggedShown === 0) {
+      appendEmptyListMessage(
+        currentArray(state.activeSection).length === 0 ? "None logged yet." : "No matches."
+      );
     }
   }
 
   function appendEmptyListMessage(text) {
     var empty = document.createElement("li");
-    empty.style.color = "#9aa0a6";
-    empty.style.cursor = "default";
+    empty.className = "list-empty";
     empty.textContent = text;
     itemListEl.appendChild(empty);
   }
@@ -252,7 +303,7 @@
     }
 
     // Risks / On Hold also surface flagged projects; all four surface their own items.
-    var flagKey = section === "risks" ? "flagRisk" : (section === "onHold" ? "flagOnHold" : null);
+    var flagKey = sectionFlagKey(section);
     if (flagKey) {
       state.data.projects
         .slice()
@@ -397,6 +448,7 @@
   }
 
   function selectItem(id) {
+    flushAutosave();
     state.selectedId = id;
     renderList();
     showSelected();
@@ -438,10 +490,19 @@
     setTimeout(function () { btn.textContent = orig; }, 1200);
   }
 
-  function handleSaveProject(e) {
-    e.preventDefault();
+  var projectSaveStatusEl = document.getElementById("projectSaveStatus");
+  var itemSaveStatusEl = document.getElementById("itemSaveStatus");
+
+  function showSaveStatus(el) {
+    el.textContent = "Saved ✓";
+    el.classList.add("visible");
+    clearTimeout(el._hideTimer);
+    el._hideTimer = setTimeout(function () { el.classList.remove("visible"); }, 1600);
+  }
+
+  function saveProjectFromForm() {
     var project = findProject(projectFields.id.value);
-    if (!project) return;
+    if (!project) return false;
 
     project.owner = projectFields.owner.value.trim();
     project.name = projectFields.name.value.trim();
@@ -454,7 +515,15 @@
 
     saveData();
     renderList();
-    flashSaved(projectFormEl);
+    return true;
+  }
+
+  function handleSaveProject(e) {
+    e.preventDefault();
+    if (saveProjectFromForm()) {
+      showSaveStatus(projectSaveStatusEl);
+      flashSaved(projectFormEl);
+    }
   }
 
   function handleDeleteProject() {
@@ -475,11 +544,10 @@
     showSelected();
   }
 
-  function handleSaveItem(e) {
-    e.preventDefault();
+  function saveItemFromForm() {
     var section = itemFields.section.value;
     var item = currentArray(section).find(function (i) { return i.id === itemFields.id.value; });
-    if (!item) return;
+    if (!item) return false;
 
     item.text = itemFields.text.value.trim();
     item.projectId = itemFields.projectLink.value || "";
@@ -487,7 +555,41 @@
 
     saveData();
     renderList();
-    flashSaved(itemFormEl);
+    return true;
+  }
+
+  function handleSaveItem(e) {
+    e.preventDefault();
+    if (saveItemFromForm()) {
+      showSaveStatus(itemSaveStatusEl);
+      flashSaved(itemFormEl);
+    }
+  }
+
+  // ---- Autosave: edits persist automatically shortly after typing ----
+
+  var autosaveTimer = null;
+
+  function runAutosave() {
+    autosaveTimer = null;
+    if (!projectFormEl.hidden) {
+      if (saveProjectFromForm()) showSaveStatus(projectSaveStatusEl);
+    } else if (!itemFormEl.hidden) {
+      if (saveItemFromForm()) showSaveStatus(itemSaveStatusEl);
+    }
+  }
+
+  function queueAutosave() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(runAutosave, 700);
+  }
+
+  // Save pending edits immediately before the form is swapped out
+  // (switching items/sections) or the page is closed.
+  function flushAutosave() {
+    if (autosaveTimer === null) return;
+    clearTimeout(autosaveTimer);
+    runAutosave();
   }
 
   function handleDeleteItem() {
@@ -533,7 +635,9 @@
     state.data.projects.forEach(function (p) {
       var g = getGroup(ownerKeyFor(p.owner));
       if (p.flagHighlight) g.highlights.push({ type: "project", data: p });
-      if (!p.flagRisk && !p.flagOnHold) g.inProgress.push({ type: "project", data: p });
+      // In Progress holds only unflagged projects: a Key Highlight, At Risk,
+      // or On Hold flag moves the project into that section instead.
+      if (!p.flagHighlight && !p.flagRisk && !p.flagOnHold) g.inProgress.push({ type: "project", data: p });
       if (p.flagRisk) g.risks.push({ type: "project", data: p });
       if (p.flagOnHold) g.onHold.push({ type: "project", data: p });
     });
@@ -568,28 +672,59 @@
     });
   }
 
-  function renderEntryHtml(entry) {
-    if (entry.type === "project") {
-      var p = entry.data;
-      var heading = "<strong>" + escapeHtml(projectReportName(p)) + "</strong>";
-      var points = linesToArray(p.detail);
-      if (points.length === 0) return "<li>" + heading + "</li>";
-      if (points.length === 1) return "<li>" + heading + " — " + escapeHtml(points[0]) + "</li>";
-      var nested = "<ul>" + points.map(function (pt) { return "<li>" + escapeHtml(pt) + "</li>"; }).join("") + "</ul>";
-      return "<li>" + heading + nested + "</li>";
+  // Every owner group renders in the same fixed shape:
+  //   Owner
+  //     Project
+  //       - description bullet
+  //       - description bullet
+  // Standalone items are grouped under their linked project's name; items with
+  // no linked project render as plain bullets at the end of the owner group.
+  function ownerEntriesToProjectGroups(entries) {
+    var groups = [];
+    var byKey = {};
+    entries.forEach(function (entry) {
+      var name, points;
+      if (entry.type === "project") {
+        name = projectReportName(entry.data);
+        points = linesToArray(entry.data.detail);
+      } else {
+        var linked = entry.data.projectId ? findProject(entry.data.projectId) : null;
+        name = linked ? projectReportName(linked) : "";
+        points = (entry.data.text || "").trim() ? [entry.data.text.trim()] : [];
+      }
+      var key = name.toLowerCase();
+      var g = byKey[key];
+      if (!g) {
+        g = byKey[key] = { name: name, points: [] };
+        groups.push(g);
+      }
+      g.points = g.points.concat(points);
+    });
+    return groups.filter(function (g) { return g.name || g.points.length; });
+  }
+
+  function renderOwnerSubgroupHtml(o) {
+    var groups = ownerEntriesToProjectGroups(o.entries);
+    var html = '<div class="owner-subgroup"><h4>' + escapeHtml(o.owner) + "</h4>";
+    var loose = [];
+    groups.forEach(function (g) {
+      if (!g.name) { loose = loose.concat(g.points); return; }
+      html += '<div class="report-project"><div class="report-project-name">' + escapeHtml(g.name) + "</div>";
+      html += g.points.length
+        ? "<ul>" + g.points.map(function (pt) { return "<li>" + escapeHtml(pt) + "</li>"; }).join("") + "</ul>"
+        : '<div class="report-no-points">No update provided.</div>';
+      html += "</div>";
+    });
+    if (loose.length) {
+      html += '<ul class="report-loose">' +
+        loose.map(function (pt) { return "<li>" + escapeHtml(pt) + "</li>"; }).join("") + "</ul>";
     }
-    var item = entry.data;
-    var linked = item.projectId ? findProject(item.projectId) : null;
-    var linkedHtml = linked ? " <em>— Project: " + escapeHtml(projectReportName(linked)) + "</em>" : "";
-    return "<li>" + escapeHtml(item.text) + linkedHtml + "</li>";
+    return html + "</div>";
   }
 
   function renderCategoryBlockHtml(catGroup, includeCopyButton) {
     var body = catGroup.owners.length
-      ? catGroup.owners.map(function (o) {
-          return '<div class="owner-subgroup"><h4>' + escapeHtml(o.owner) + "</h4><ul>" +
-            o.entries.map(renderEntryHtml).join("") + "</ul></div>";
-        }).join("")
+      ? catGroup.owners.map(renderOwnerSubgroupHtml).join("")
       : '<div class="none">None reported</div>';
 
     var copyBtnHtml = includeCopyButton
@@ -606,7 +741,7 @@
 
   function buildReportHtml(includeCopyButtons) {
     var groups = buildCategoryGroups();
-    var heading = '<h1 style="font-size:20px;margin-bottom:16px;">Project Feedback Report - ' +
+    var heading = '<h1 class="report-title">Project Feedback Report - ' +
       new Date().toLocaleDateString() + "</h1>";
     if (!hasAnyData()) {
       return heading + '<p class="none">There is nothing to report yet.</p>';
@@ -634,27 +769,23 @@
 
   // ---- Report: plain text for copying ----
 
-  function entryPlainText(entry) {
-    if (entry.type === "project") {
-      var p = entry.data;
-      var points = linesToArray(p.detail);
-      if (points.length <= 1) {
-        return "- " + projectReportName(p) + (points.length ? ": " + points[0] : "");
-      }
-      return "- " + projectReportName(p) + "\n" +
-        points.map(function (pt) { return "  - " + pt; }).join("\n");
-    }
-    var item = entry.data;
-    var linked = item.projectId ? findProject(item.projectId) : null;
-    return "- " + item.text + (linked ? " (Project: " + projectReportName(linked) + ")" : "");
+  function ownerSubgroupPlainText(o) {
+    var lines = [o.owner];
+    var loose = [];
+    ownerEntriesToProjectGroups(o.entries).forEach(function (g) {
+      if (!g.name) { loose = loose.concat(g.points); return; }
+      lines.push("- " + g.name);
+      g.points.forEach(function (pt) { lines.push("  - " + pt); });
+    });
+    loose.forEach(function (pt) { lines.push("- " + pt); });
+    return lines;
   }
 
   function categoryGroupPlainText(catGroup) {
     var lines = [catGroup.heading.toUpperCase(), "=".repeat(catGroup.heading.length)];
     catGroup.owners.forEach(function (o) {
       lines.push("");
-      lines.push(o.owner);
-      o.entries.forEach(function (entry) { lines.push(entryPlainText(entry)); });
+      lines.push.apply(lines, ownerSubgroupPlainText(o));
     });
     return lines.join("\n");
   }
@@ -1190,6 +1321,7 @@
     callGroq(settings.apiKey, settings.model, systemPrompt, text)
       .then(function (rewritten) {
         applyResult(rewritten);
+        queueAutosave();
         button.textContent = originalLabel;
         button.disabled = false;
       })
@@ -1688,6 +1820,37 @@
   itemFormEl.addEventListener("submit", handleSaveItem);
   document.getElementById("btnDeleteItem").addEventListener("click", handleDeleteItem);
 
+  projectFormEl.addEventListener("input", queueAutosave);
+  projectFormEl.addEventListener("change", queueAutosave);
+  itemFormEl.addEventListener("input", queueAutosave);
+  itemFormEl.addEventListener("change", queueAutosave);
+  window.addEventListener("beforeunload", flushAutosave);
+
+  // Header "More" dropdown menu
+  var moreMenuEl = document.getElementById("moreMenu");
+  var btnMoreMenuEl = document.getElementById("btnMoreMenu");
+  var moreMenuListEl = document.getElementById("moreMenuList");
+
+  function closeMoreMenu() {
+    moreMenuListEl.hidden = true;
+    btnMoreMenuEl.setAttribute("aria-expanded", "false");
+  }
+
+  btnMoreMenuEl.addEventListener("click", function (e) {
+    e.stopPropagation();
+    var willOpen = moreMenuListEl.hidden;
+    moreMenuListEl.hidden = !willOpen;
+    btnMoreMenuEl.setAttribute("aria-expanded", String(willOpen));
+  });
+
+  document.addEventListener("click", function (e) {
+    if (!moreMenuEl.contains(e.target)) closeMoreMenu();
+  });
+
+  moreMenuListEl.addEventListener("click", function (e) {
+    if (e.target.closest(".menu-item")) closeMoreMenu();
+  });
+
   document.querySelector('.btn-rewrite[data-field="name"]').addEventListener("click", function (e) {
     handleRewriteProjectName(e.currentTarget);
   });
@@ -1730,6 +1893,7 @@
 
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
+      if (!moreMenuListEl.hidden) { closeMoreMenu(); return; }
       if (!settingsModalEl.hidden) { closeSettingsModal(); return; }
       if (!chatPanelEl.hidden) { chatPanelEl.hidden = true; }
       return;
@@ -1743,7 +1907,6 @@
   // ---- Init ----
 
   loadData();
-  renderList();
-  showSelected();
+  setActiveSection("projects");
   updateUndoButton();
 })();

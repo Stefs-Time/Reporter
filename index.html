@@ -13,19 +13,29 @@
 <body>
 
 <header class="app-header no-print">
-  <h1>Project Feedback Tracker</h1>
+  <div class="app-title">
+    <span class="app-logo">📊</span>
+    <h1>Project Feedback Tracker</h1>
+  </div>
   <div class="header-actions">
     <button id="btnPrintReport" class="btn btn-primary">🖨 Print Report</button>
-    <button id="btnCopyReport" class="btn">📋 Copy Full Report</button>
-    <button id="btnEnhanceAll" class="btn">✨ AI Enhance All</button>
+    <button id="btnCopyReport" class="btn">📋 Copy Report</button>
+    <button id="btnEnhanceAll" class="btn">✨ Enhance All</button>
     <button id="btnUndoAi" class="btn" hidden>↩ Undo AI</button>
-    <button id="btnExportCsv" class="btn">⬇ Export CSV</button>
-    <label class="btn" for="importCsvFile">⬆ Import CSV</label>
-    <input type="file" id="importCsvFile" accept=".csv,text/csv" hidden>
-    <button id="btnExport" class="btn">Export Data</button>
-    <label class="btn" for="importFile">Import Data</label>
-    <input type="file" id="importFile" accept="application/json" hidden>
-    <button id="btnSettings" class="btn">AI Settings</button>
+    <div class="menu" id="moreMenu">
+      <button type="button" id="btnMoreMenu" class="btn" aria-haspopup="true" aria-expanded="false">⋯ More</button>
+      <div class="menu-list" id="moreMenuList" hidden>
+        <button id="btnExportCsv" class="menu-item">⬇ Export CSV</button>
+        <label class="menu-item" for="importCsvFile">⬆ Import CSV</label>
+        <input type="file" id="importCsvFile" accept=".csv,text/csv" hidden>
+        <div class="menu-sep"></div>
+        <button id="btnExport" class="menu-item">💾 Export Backup (JSON)</button>
+        <label class="menu-item" for="importFile">📂 Import Backup (JSON)</label>
+        <input type="file" id="importFile" accept="application/json" hidden>
+        <div class="menu-sep"></div>
+        <button id="btnSettings" class="menu-item">⚙ AI Settings</button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -33,12 +43,12 @@
 
   <aside class="sidebar no-print">
     <nav class="section-nav">
-      <button type="button" class="nav-btn active" data-section="projects">Projects</button>
-      <button type="button" class="nav-btn" data-section="risks">Risks</button>
-      <button type="button" class="nav-btn" data-section="onHold">On Hold</button>
-      <button type="button" class="nav-btn" data-section="itRequests">IT Support Requests</button>
-      <button type="button" class="nav-btn" data-section="powerBi">Power BI Help Desk</button>
-      <button type="button" class="nav-btn" data-section="report">Report</button>
+      <button type="button" class="nav-btn active" data-section="projects"><span class="nav-label">📁 Projects</span><span class="nav-count" data-count="projects"></span></button>
+      <button type="button" class="nav-btn" data-section="risks"><span class="nav-label">⚠️ Risks</span><span class="nav-count" data-count="risks"></span></button>
+      <button type="button" class="nav-btn" data-section="onHold"><span class="nav-label">⏸ On Hold</span><span class="nav-count" data-count="onHold"></span></button>
+      <button type="button" class="nav-btn" data-section="itRequests"><span class="nav-label">🛠 IT Support Requests</span><span class="nav-count" data-count="itRequests"></span></button>
+      <button type="button" class="nav-btn" data-section="powerBi"><span class="nav-label">📈 Power BI Help Desk</span><span class="nav-count" data-count="powerBi"></span></button>
+      <button type="button" class="nav-btn" data-section="report"><span class="nav-label">📄 Report</span></button>
     </nav>
 
     <div id="sidebarListSection">
@@ -100,12 +110,15 @@
         <label class="flag-checkbox"><input type="checkbox" id="flagOnHoldInput"> ⏸ Flag as On Hold</label>
       </div>
       <p class="flag-hint">
-        Projects not flagged At Risk or On Hold automatically appear under "In Progress" on the report.
+        Unflagged projects appear under "In Progress" on the report. Flagging a project as a
+        Key Highlight, At Risk, or On Hold moves it out of In Progress and into that section instead.
+        Changes are saved automatically as you type.
       </p>
 
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save</button>
         <button type="button" id="btnDeleteProject" class="btn btn-danger">Delete</button>
+        <span class="save-status" id="projectSaveStatus" aria-live="polite"></span>
       </div>
     </form>
 
@@ -132,6 +145,7 @@
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save</button>
         <button type="button" id="btnDeleteItem" class="btn btn-danger">Delete</button>
+        <span class="save-status" id="itemSaveStatus" aria-live="polite"></span>
       </div>
     </form>
   </main>
