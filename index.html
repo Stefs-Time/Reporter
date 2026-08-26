@@ -7,136 +7,98 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="favicon.svg">
 <link rel="manifest" href="site.webmanifest">
-<meta name="theme-color" content="#4f6bd8">
+<meta name="theme-color" content="#1d212b">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <header class="app-header no-print">
-  <h1>Project Feedback Tracker</h1>
+  <div class="app-title">
+    <span class="app-logo">📊</span>
+    <h1>Project Feedback Tracker</h1>
+    <span id="saveStamp" class="save-stamp" aria-live="polite"></span>
+  </div>
   <div class="header-actions">
     <button id="btnPrintReport" class="btn btn-primary">🖨 Print Report</button>
-    <button id="btnCopyReport" class="btn">📋 Copy Full Report</button>
-    <button id="btnEnhanceAll" class="btn">✨ AI Enhance All</button>
+    <button id="btnCopyReport" class="btn">📋 Copy Report</button>
+    <button id="btnEnhanceAll" class="btn">✨ Enhance All</button>
     <button id="btnUndoAi" class="btn" hidden>↩ Undo AI</button>
-    <button id="btnExportCsv" class="btn">⬇ Export CSV</button>
-    <label class="btn" for="importCsvFile">⬆ Import CSV</label>
-    <input type="file" id="importCsvFile" accept=".csv,text/csv" hidden>
-    <button id="btnExport" class="btn">Export Data</button>
-    <label class="btn" for="importFile">Import Data</label>
-    <input type="file" id="importFile" accept="application/json" hidden>
-    <button id="btnSettings" class="btn">AI Settings</button>
+    <button type="button" id="btnTheme" class="btn btn-icon" title="Switch to light mode">☀️</button>
+    <div class="menu" id="moreMenu">
+      <button type="button" id="btnMoreMenu" class="btn" aria-haspopup="true" aria-expanded="false">⋯ More</button>
+      <div class="menu-list" id="moreMenuList" hidden>
+        <button id="btnExportCsv" class="menu-item">⬇ Export CSV</button>
+        <label class="menu-item" for="importCsvFile">⬆ Import CSV</label>
+        <input type="file" id="importCsvFile" accept=".csv,text/csv" hidden>
+        <div class="menu-sep"></div>
+        <button id="btnExport" class="menu-item">💾 Export Backup (JSON)</button>
+        <label class="menu-item" for="importFile">📂 Import Backup (JSON)</label>
+        <input type="file" id="importFile" accept="application/json" hidden>
+        <div class="menu-sep"></div>
+        <button id="btnSettings" class="menu-item">⚙ AI Settings</button>
+      </div>
+    </div>
   </div>
 </header>
 
 <div class="app-body">
 
-  <aside class="sidebar no-print">
-    <nav class="section-nav">
-      <button type="button" class="nav-btn active" data-section="projects">Projects</button>
-      <button type="button" class="nav-btn" data-section="risks">Risks</button>
-      <button type="button" class="nav-btn" data-section="onHold">On Hold</button>
-      <button type="button" class="nav-btn" data-section="itRequests">IT Support Requests</button>
-      <button type="button" class="nav-btn" data-section="powerBi">Power BI Help Desk</button>
-      <button type="button" class="nav-btn" data-section="report">Report</button>
-    </nav>
+  <!-- Everything is edited right here — no screens, no save buttons. -->
+  <main class="editor no-print">
 
-    <div id="sidebarListSection">
-      <div class="sidebar-search">
-        <input type="text" id="searchBox" placeholder="Search...">
+    <section class="esec">
+      <div class="esec-head">
+        <h2>📁 Projects <span class="esec-count" data-count="projects"></span></h2>
+        <button type="button" class="btn btn-add" data-add="projects">+ Add Project</button>
       </div>
+      <div class="esec-body" id="list-projects"></div>
+    </section>
 
-      <ul id="itemList" class="project-list"></ul>
-
-      <button type="button" id="btnNewItem" class="btn btn-primary btn-new-item">+ New</button>
-    </div>
-  </aside>
-
-  <main class="editor no-print" id="editorPane">
-    <div id="emptyState" class="empty-state">
-      <p>Select an item on the left, or click <strong>+ New</strong> to add one.</p>
-    </div>
-
-    <div id="galleryView" class="gallery-view" hidden></div>
-
-    <div id="reportView" class="report-view" hidden></div>
-
-    <!-- Project form -->
-    <form id="projectForm" class="project-form" hidden>
-      <input type="hidden" id="projectId">
-
-      <div class="form-row">
-        <div class="form-field">
-          <label for="ownerInput">Responsible Owner</label>
-          <input type="text" id="ownerInput" required placeholder="e.g. Stefan Botha">
-        </div>
-        <div class="form-field">
-          <div class="field-label-row">
-            <label for="nameInput">Project Name</label>
-            <button type="button" class="btn-rewrite" data-field="name">✨ Rewrite</button>
-          </div>
-          <input type="text" id="nameInput" required placeholder="e.g. Sales Dashboard Revamp">
-        </div>
-        <div class="form-field form-field-shortcode">
-          <div class="field-label-row">
-            <label for="shortcodeInput">Shortcode</label>
-            <button type="button" class="btn-rewrite" data-field="shortcode">✨</button>
-          </div>
-          <input type="text" id="shortcodeInput" placeholder="e.g. SDR">
-        </div>
+    <section class="esec">
+      <div class="esec-head">
+        <h2>⚠️ Extra Risk Items <span class="esec-count" data-count="risks"></span></h2>
+        <button type="button" class="btn btn-add" data-add="risks">+ Add</button>
       </div>
+      <p class="esec-note">A whole project at risk? Just switch on its ⚠️ chip above. List extra, specific risks here.</p>
+      <div class="esec-body" id="list-risks"></div>
+    </section>
 
-      <div class="form-field">
-        <div class="field-label-row">
-          <label for="detailInput">Latest Feedback / Status Caption</label>
-          <button type="button" class="btn-rewrite" data-field="detail">✨ Rewrite</button>
-        </div>
-        <textarea id="detailInput" rows="3" placeholder="Where the project stands. Add more than one line to break it into separate highlight points."></textarea>
+    <section class="esec">
+      <div class="esec-head">
+        <h2>⏸ Extra On-Hold Items <span class="esec-count" data-count="onHold"></span></h2>
+        <button type="button" class="btn btn-add" data-add="onHold">+ Add</button>
       </div>
+      <p class="esec-note">A whole project on hold? Switch on its ⏸ chip above. List extra on-hold items here.</p>
+      <div class="esec-body" id="list-onHold"></div>
+    </section>
 
-      <div class="form-field flags-row">
-        <label class="flag-checkbox"><input type="checkbox" id="flagHighlightInput"> ⭐ Feature in Key Highlights</label>
-        <label class="flag-checkbox"><input type="checkbox" id="flagRiskInput"> ⚠️ Flag as At Risk</label>
-        <label class="flag-checkbox"><input type="checkbox" id="flagOnHoldInput"> ⏸ Flag as On Hold</label>
+    <section class="esec">
+      <div class="esec-head">
+        <h2>🛠 IT Support Requests <span class="esec-count" data-count="itRequests"></span></h2>
+        <button type="button" class="btn btn-add" data-add="itRequests">+ Add</button>
       </div>
-      <p class="flag-hint">
-        Projects not flagged At Risk or On Hold automatically appear under "In Progress" on the report.
-      </p>
+      <div class="esec-body" id="list-itRequests"></div>
+    </section>
 
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <button type="button" id="btnDeleteProject" class="btn btn-danger">Delete</button>
+    <section class="esec">
+      <div class="esec-head">
+        <h2>📈 Power BI Help Desk <span class="esec-count" data-count="powerBi"></span></h2>
+        <button type="button" class="btn btn-add" data-add="powerBi">+ Add</button>
       </div>
-    </form>
+      <div class="esec-body" id="list-powerBi"></div>
+    </section>
 
-    <!-- Standalone item form: Risks / On Hold / IT Support Requests / Power BI Help Desk -->
-    <form id="itemForm" class="project-form" hidden>
-      <input type="hidden" id="itemId">
-      <input type="hidden" id="itemSection">
-
-      <div class="form-field">
-        <div class="field-label-row">
-          <label for="itemTextInput" id="itemTextLabel">Description</label>
-          <button type="button" class="btn-rewrite" id="btnRewriteItem">✨ Rewrite</button>
-        </div>
-        <textarea id="itemTextInput" rows="3" placeholder="Describe the item"></textarea>
-      </div>
-
-      <div class="form-field">
-        <label for="itemProjectLink">Linked Project (optional)</label>
-        <select id="itemProjectLink">
-          <option value="">None</option>
-        </select>
-      </div>
-
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <button type="button" id="btnDeleteItem" class="btn btn-danger">Delete</button>
-      </div>
-    </form>
   </main>
 
+  <!-- Live report preview: exactly what Print / Copy produces. -->
+  <aside class="preview no-print">
+    <p class="preview-note">Live preview — updates as you type. Print / Copy produce exactly this.</p>
+    <div id="reportView" class="report-view"></div>
+  </aside>
+
 </div>
+
+<datalist id="ownerOptions"></datalist>
 
 <section id="printArea" class="print-only"></section>
 
